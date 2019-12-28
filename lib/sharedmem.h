@@ -21,6 +21,8 @@
 #define E 1
 #define S 2
 #define W 3
+
+#define _GNU_SOURCE
 /*OPTIONS SHARED MEMORY*/
 struct myOptions
 {

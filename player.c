@@ -213,11 +213,12 @@ void SendDirective(int w,int h,int pawnPos[],int instrMsg_id,cell* table,int n_p
 	}
 
 	getFlagPos(w*h,table,flagPos);
-
-	for(i=0;i<n_pawns;i++)
-	{
-		Algorithm(w,h,pawnPos[i],i,flagPos,n_flags,assoc);
-	}
+	/*Algorithm aplicated n_flags times because of the Recalculation of Direct taking flag of a Pawn*/
+	for(j=0;j<n_flags;j++)
+		for(i=0;i<n_pawns;i++)
+		{
+			Algorithm(w,h,pawnPos[i],i,flagPos,n_flags,assoc);
+		}
 
 	printf("			---------------------------------letter %c------------------------------\n",letter);
 
@@ -290,7 +291,7 @@ void Algorithm(int w,int h,int pos,int pawnPos,int flagPos[],int n_flags,Move as
 		found=0;
 		getPos(&endX,&endY,flagPos[i],w);
 		currdist=(abs(startX-endX)+abs(startY-endY));
-		if(currdist<assoc[i].distance || assoc[i].pawnPos==-1)
+		if(currdist<=assoc[i].distance || assoc[i].pawnPos==-1)
 		{
 			for(j=0;j<n_flags && found!=1;j++)
 			{
@@ -298,7 +299,7 @@ void Algorithm(int w,int h,int pos,int pawnPos,int flagPos[],int n_flags,Move as
 				{
 					getPos(&fX,&fY,flagPos[Path[j-1].flagIndex],w);
 					pathdist=(abs(endX-fX)+abs(endY-fY))+Path[j-1].flagDistance;
-					if((pathdist<Path[j].flagDistance || Path[j].flagIndex==-1) && (pathdist<assoc[i].distance || assoc[i].pawnPos==-1))
+					if((pathdist<Path[j].flagDistance || Path[j].flagIndex==-1) && (pathdist<=assoc[i].distance || assoc[i].pawnPos==-1))
 					{
 						insertPath(Path,n_flags,flagPos,j,i,pathdist,w);
 						found=1;
@@ -306,7 +307,7 @@ void Algorithm(int w,int h,int pos,int pawnPos,int flagPos[],int n_flags,Move as
 				}
 				else
 				{
-					if((currdist<Path[j].flagDistance || Path[j].flagIndex==-1) && (currdist<assoc[i].distance || assoc[i].pawnPos==-1))
+					if((currdist<Path[j].flagDistance || Path[j].flagIndex==-1) && (currdist<=assoc[i].distance || assoc[i].pawnPos==-1))
 					{
 						insertPath(Path,n_flags,flagPos,j,i,currdist,w);
 						found=1;
@@ -319,7 +320,7 @@ void Algorithm(int w,int h,int pos,int pawnPos,int flagPos[],int n_flags,Move as
 	found =0;
 	for(i=0;i<n_flags && found!=1;i++)
 	{
-		if(Path[i].flagDistance < assoc[Path[i].flagIndex].distance || assoc[Path[i].flagIndex].pawnPos==-1)
+		if(Path[i].flagDistance <= assoc[Path[i].flagIndex].distance || assoc[Path[i].flagIndex].pawnPos==-1)
 		{
 			assoc[Path[i].flagIndex].distance=Path[i].flagDistance;
 			assoc[Path[i].flagIndex].pawnPos=pawnPos;

@@ -1,6 +1,6 @@
 
 
-FLAGS =  -std=c89 -Wpedantic
+FLAGS =  -std=c89 -Wpedantic -D_POSIX_C_SOURCE=199309L 
 
 
 all : master.c player.c pawn.c lib/sharedmem.c lib/sharedmem.h

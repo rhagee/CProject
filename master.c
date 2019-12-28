@@ -114,12 +114,19 @@ int main()
 	Print_Table(w,h,table);
 	Print_Status(w,h,table,smap_id);
 	semReserve(sync_id,ROUNDSTART,0);
-	alarm(timeleft);
 	semWaitZero(sync_id,ALLSTARTED,0);
-	semRelease(sync_id,ROUNDSTART,0);
-	semSet(sync_id,ALLSTARTED,((n_players*n_pawns)+n_players));
+	alarm(timeleft);
 
+	/*Dovrò spostarlo in un HANDLER di fine round, questi semafori verranno SBLOCCATI prima di sbloccare l'END Round ai player
+	Ovviamente ENDRound avrà un controllo su "tutti hanno letto", a quel punto verrà resettato insieme al TUTTI hanno letto
+	prima di Sbloccare nuovamente RoundStart->AllRead e aver piazzato le bandierine*/
+	
+	semSet(sync_id,ALLSTARTED,((n_players*n_pawns)+n_players));
+	semRelease(sync_id,ROUNDSTART,0);
 	printf("MASTER RESET SEMAPHORES \n");
+	
+
+	
 
 	/*Round should be running there, master waiting info about Scores.
 	  Probably best way to do it is passing a message queue downside and give it 1 for player, and wait on 0, detect type

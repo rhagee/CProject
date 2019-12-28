@@ -9,17 +9,28 @@
 #include <sys/errno.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
+#include <sys/time.h>
+#include <time.h>
 
 #include "lib/sharedmem.h"
 
-#define intconvert(X) atoi(argv[X]);
-#define longconvert(X) atol(argv[X]);
 
-void Move(int smap_id,int* px,int* py,int w,int dir[],int* pindex,int index,int* pfailed,cell* table,char letter,int nextCardinal);
+#define intconvert(X) atoi(argv[X])
+#define longconvert(X) atol(argv[X])
 
+#define STOPMOVE 2
+#define ADDMOVE 1
+
+#define true 1
+#define false 0
+
+int Move(int smap_id,int* px,int* py,int w,int dir[],int* pindex,int index,int* pfailed,cell* table,char letter,int nextCardinal);
+int getPos(int,int,int);
+int findOtherPath(int dir[],cell* table,int,int,int*,int*,int,char,struct timespec delay,int type);
 
 int main(int argc,char* argv[])
 {
+	struct timespec delay;
 	char letter;
 	int term;
 	int posMsg_id,instrMsg_id,opt_id,map_id,smap_id,sync_id,index,x,y,w,h;
@@ -43,30 +54,65 @@ int main(int argc,char* argv[])
 	failed=0;
 	term=0;
 
+	delay.tv_sec=0;
+	delay.tv_nsec=100000000L;
 	table=getMap(map_id);
 	read_posMsg(posMsg_id,&pos_message,type);
 	instr_message.left=1;
-	printf("pawn : %c - %d , POS: x:%d y:%d\n",letter,type,pos_message.x,pos_message.y);
+	/*printf("pawn : %c - %d , POS: x:%d y:%d\n",letter,type,pos_message.x,pos_message.y);*/
 	x=pos_message.x;
 	y=pos_message.y;
 	w=settings->SO_BASE;
 	h=settings->SO_ALTEZZA;
+	/* Init of directions */
+	dir[N]=0;
+	dir[S]=0;
+	dir[W]=0;
+	dir[E]=0;
+	/*WAIT round start and signal that i heard Round start*/
 	semWaitZero(sync_id,ROUNDSTART,0);
 	semReserve(sync_id,ALLSTARTED,0);
 
 	while(instr_message.left>0)
 	{
 		read_instrMsg(instrMsg_id,&instr_message,type);
-		if(instr_message.left!=-1)
-		printf("pawn : %c - %d MOVE: N: %d S: %d W: %d E: %d -> left instr %d\n",letter,instr_message.type,instr_message.dir[N],instr_message.dir[S],instr_message.dir[W],instr_message.dir[E],instr_message.left);
-		dir[N]=instr_message.dir[N];
-		dir[S]=instr_message.dir[S];
-		dir[W]=instr_message.dir[W];
-		dir[E]=instr_message.dir[E];
-		index=0;
-		while((dir[N]>0 || dir[S]>0 || dir[W]>0 || dir[E]>0) && term==0)
+		/*if(instr_message.left!=-1)
+			printf("pawn : %c - %d MOVE: N: %d S: %d W: %d E: %d -> left instr %d\n",letter,instr_message.type,instr_message.dir[N],instr_message.dir[S],instr_message.dir[W],instr_message.dir[E],instr_message.left);*/
+		dir[N]+=instr_message.dir[N];
+		dir[S]+=instr_message.dir[S];
+		dir[W]+=instr_message.dir[W];
+		dir[E]+=instr_message.dir[E];
+		/*Delete useless moves*/
+		if(dir[N]>0 && dir[S]>0)
 		{
-			if(dir[index]==0)
+			if(dir[N]>dir[S])
+			{
+				dir[N]=dir[N]-dir[S];
+				dir[S]=0;
+			}
+			else
+			{
+				dir[S]=dir[S]-dir[N];
+				dir[N]=0;
+			}
+		}
+			if(dir[W]>0 && dir[E]>0)
+		{
+			if(dir[W]>dir[E])
+			{
+				dir[W]=dir[W]-dir[E];
+				dir[E]=0;
+			}
+			else
+			{
+				dir[E]=dir[E]-dir[W];
+				dir[W]=0;
+			}
+		}
+		index=0;
+		while((dir[N]>0 || dir[S]>0 || dir[W]>0 || dir[E]>0) && term==0 && table[getPos((x+dir[E]-dir[W]),(y+dir[S]-dir[N]),w)].type=='f')
+		{
+			if(dir[index]<=0 && failed<4)
 			{
 				if(index<3)
 					index++;
@@ -76,74 +122,63 @@ int main(int argc,char* argv[])
 			else if(failed>=4)
 			{
 				if((dir[N]+dir[S]+dir[W]+dir[E])==1)
-					term=2;
-
-
-
+				{
+					term=STOPMOVE;
+					failed=0;
+				}
+				else
+				{
+					printf("FIND OTHER PATH\n");
+					if((findOtherPath(dir,table,w,h,&x,&y,smap_id,letter,delay,type)) == false)
+					{
+						term=STOPMOVE;
+					}
+					else
+					{
+						failed=0;
+					}
+				}
+				/*else
+					alterMove(dir,w,h,x,y);*/
 				/*Implementare l'auto movimento cercando di capire se effettivamente sono bloccato o meno*/
 				/*Necessito anche di controllare se POSSO muovermi verso il lato che scelgo (E-W), altrimenti vuol dire che sono bloccato*/
 				/*Implementare la capacità della pedina di riconoscere la sua possibilità di raggiungimento dell'obiettivo ogni movimento aggiunto.
 				Se è incapace deve rimanere immobile, altrimenti deve trovare la soluzione di movimento*/
 
 
-
-				/*else
-				{
-
-					if(dir[N]>0)
-					{
-						dir[W]++;
-						dir[E]++;
-						if(dir[E]>0)
-							Move(smap_id,&x,&y,w,dir,&index,W,&failed,table,letter,N);
-						else
-							Move(smap_id,&x,&y,w,dir,&index,E,&failed,table,letter,N);
-					}
-					else if(dir[S]>0)
-					{
-						dir[W]++;
-						dir[E]++;
-						if(dir[E]>0)
-							Move(smap_id,&x,&y,w,dir,&index,W,&failed,table,letter,S);
-						else
-							Move(smap_id,&x,&y,w,dir,&index,E,&failed,table,letter,S);
-					}
-					else if(dir[E]>0)
-					{
-						dir[S]++;
-						dir[N]++;
-						if(dir[N]>0)
-							Move(smap_id,&x,&y,w,dir,&index,S,&failed,table,letter,E);
-						else
-							Move(smap_id,&x,&y,w,dir,&index,N,&failed,table,letter,E);
-					}
-					else if(dir[W]>0)
-					{
-						dir[S]++;
-						dir[N]++;
-						if(dir[N]>0)
-							Move(smap_id,&x,&y,w,dir,&index,S,&failed,table,letter,W);
-						else
-							Move(smap_id,&x,&y,w,dir,&index,N,&failed,table,letter,W);
-					}
-				}*/
-				term = 1;
-				failed=0;
+/*
+				term = ADDMOVE;
+				failed=0;*/
 			}
 			else
 			{
 				if(index<3)
-					Move(smap_id,&x,&y,w,dir,&index,index,&failed,table,letter,index+1);
+				{
+					if(Move(smap_id,&x,&y,w,dir,&index,index,&failed,table,letter,index+1)==true)
+						nanosleep(&delay,NULL);
+				}
 				else
-					Move(smap_id,&x,&y,w,dir,&index,index,&failed,table,letter,0);
+				{
+					if(Move(smap_id,&x,&y,w,dir,&index,index,&failed,table,letter,0)==true)
+						nanosleep(&delay,NULL);
+				}
 			}
+		}
+		if(dir[N]+dir[S]+dir[W]+dir[E]>0 && failed!=2)
+		{
+			printf("MISS for Pawn : %c-%d -> MY LAST INDEXES N:%d S:%d W:%d E: %d\n",letter,type,dir[N],dir[S],dir[W],dir[E]);
+		}
+		else if(instr_message.left>=0)
+		{
+			printf("HIT for Pawn : %c-%d -> MY LAST INDEXES N:%d S:%d W:%d E: %d\n",letter,type,dir[N],dir[S],dir[W],dir[E]);
 		}
 	}
 	exit(0);
 }
 
-void Move(int smap_id,int* px,int* py,int w,int dir[],int* pindex,int index,int* pfailed,cell* table,char letter,int nextCardinal)
+int Move(int smap_id,int* px,int* py,int w,int dir[],int* pindex,int index,int* pfailed,cell* table,char letter,int nextCardinal)
 {
+	int statement;
 	int x,y,actualpos,nextpos;
 	int incX,incY;
 	int res;
@@ -183,8 +218,10 @@ void Move(int smap_id,int* px,int* py,int w,int dir[],int* pindex,int index,int*
 	if(semReserve(smap_id,nextpos,IPC_NOWAIT)==-1)
 	{
 		printf("\n ERROR x:%d y:%d\n",x+1,y);
-		*pindex=nextCardinal;
+		if(pindex!=NULL)
+			*pindex=nextCardinal;
 		*pfailed=*pfailed+1;
+		statement = false;
 	}
 	else
 	{
@@ -197,12 +234,248 @@ void Move(int smap_id,int* px,int* py,int w,int dir[],int* pindex,int index,int*
 		*px = x+incX;
 		*py= y+incY;
 		dir[index]--;
+		statement=true;
 	}
-	nanosleep(100000000);
+	
+	return statement;
 }
 
 
 int getPos(int x,int y,int w)
 {
 	return ((y*w)+x);
+}
+
+int findOtherPath(int dir[],cell* table,int w,int h,int* px,int* py,int smap_id,char letter,struct timespec delay,int type)
+{
+	int i,j,x,y;
+	int thismoves,next;
+	int q;
+	int ok,myfails;
+	int nextdir[4];
+	int foundplus,foundminus;
+	int minusMoves,plusMoves;
+	x=*px;
+	y=*py;
+	printf("Trying other path \n");
+	foundminus=false;
+	foundplus=false;
+	ok=false;
+	q=0;
+	if(dir[N]>0)
+	{
+		nextdir[q]=N;
+		q++;
+	}
+    if(dir[S]>0)
+    {
+    	nextdir[q]=S;
+		q++;
+    }
+    if(dir[E]>0)
+    {
+    	nextdir[q]=E;
+		q++;
+    }
+	if(dir[W]>0)
+	{
+		nextdir[q]=W;
+		q++;
+	}
+	printf("Cycling q%d times for pawn %c-%d\n",q,letter,type);
+	for(j=0;j<q && ok==false;j++)
+	{
+		plusMoves=0;
+		minusMoves=0;
+		foundplus=false;
+		foundminus=false;
+		ok=false;
+		printf("Cycling %d\n",nextdir[j]);
+		switch(nextdir[j])
+		{
+			case S:
+			{
+				for(i=x+1;i<w && foundplus==false;i++)
+				{
+					plusMoves++;
+					if(table[getPos(i,y+1,w)].type!='p' && table[getPos(i,y,w)].type!='p')
+					{
+						foundplus=true;
+					}
+				}
+				for(i=x-1;i>-1 && foundminus==false;i--)
+				{
+					minusMoves++;
+					if(table[getPos(i,y+1,w)].type!='p' && table[getPos(i,y,w)].type!='p')
+					{
+						foundminus=true;
+					}
+				}
+				if(foundminus==true || foundplus==true)
+				{
+					ok=true;
+					next=S;
+					if(plusMoves<minusMoves && foundplus==true)
+					{
+						thismoves=E;
+						dir[E]+=plusMoves;
+						dir[W]+=plusMoves;
+
+					}
+					else if(minusMoves<=plusMoves && foundminus==true)
+					{
+						thismoves=W;
+						dir[E]+=minusMoves;
+						dir[W]+=minusMoves;
+					}
+				}
+			}
+			break;
+			case N:
+			{
+				for(i=x+1;i<w && foundplus==false;i++)
+				{
+					plusMoves++;
+					if(table[getPos(i,y-1,w)].type!='p' && table[getPos(i,y,w)].type!='p')
+					{
+						foundplus=true;
+					}
+				}
+				for(i=x-1;i>-1 && foundminus==false;i--)
+				{
+					minusMoves++;
+					if(table[getPos(i,y-1,w)].type!='p' && table[getPos(i,y,w)].type!='p')
+					{
+						foundminus=true;
+					}
+				}
+				if(foundminus==true || foundplus==true)
+				{
+					ok=true;
+					next=N;
+					if(plusMoves<minusMoves && foundplus==true)
+					{
+						thismoves=E;
+						dir[E]+=plusMoves;
+						dir[W]+=plusMoves;
+
+					}
+					else if(minusMoves<=plusMoves && foundminus==true)
+					{
+						thismoves=W;
+						dir[E]+=minusMoves;
+						dir[W]+=minusMoves;
+					}
+				}
+			}
+			break;
+			case E:
+			{
+				for(i=y+1;i<h && foundplus==false;i++)
+				{
+					plusMoves++;
+					if(table[getPos(x+1,i,w)].type!='p' && table[getPos(x,i,w)].type!='p')
+					{
+						foundplus=true;
+					}
+				}
+				for(i=y-1;i>-1 && foundminus==false;i--)
+				{
+					minusMoves++;
+					if(table[getPos(x+1,i,w)].type!='p' && table[getPos(x,i,w)].type!='p')
+					{
+						foundminus=true;
+					}
+				}
+					if(foundminus==true || foundplus==true)
+				{
+					ok=true;
+					next=E;
+					if(plusMoves<minusMoves && foundplus==true)
+					{
+						
+						thismoves=S;
+						dir[S]+=plusMoves;
+						dir[N]+=plusMoves;
+
+					}
+					else if(minusMoves<=plusMoves && foundminus==true)
+					{
+						thismoves=N;
+						dir[S]+=minusMoves;
+						dir[N]+=minusMoves;
+					}
+				}
+			}
+			break;
+			case W:
+			{
+				for(i=y+1;i<h && foundplus==false;i++)
+				{
+					plusMoves++;
+					if(table[getPos(x-1,i,w)].type!='p' && table[getPos(x,i,w)].type!='p')
+					{
+						foundplus=true;
+					}
+				}
+				for(i=y-1;i>-1 && foundminus==false;i--)
+				{
+					minusMoves++;
+					if(table[getPos(x-1,i,w)].type!='p' && table[getPos(x,i,w)].type!='p')
+					{
+						foundminus=true;
+					}
+				}
+				if(foundminus==true || foundplus==true)
+				{
+					ok=true;
+					next=W;
+					if(plusMoves<minusMoves && foundplus==true)
+					{
+						
+						thismoves=S;
+						dir[S]+=plusMoves;
+						dir[N]+=plusMoves;
+
+					}
+					else if(minusMoves<=plusMoves && foundminus==true)
+					{
+						thismoves=N;
+						dir[S]+=minusMoves;
+						dir[N]+=minusMoves;
+					}
+				}
+			}
+			break;
+		}
+		if(ok==true)
+		{
+			printf("I Tried other path %c-%d : dir %d and next %d \n",letter,type,thismoves,next);
+				myfails=0;
+				while(dir[thismoves]>0 && myfails<4)
+				{
+					if(Move(smap_id,px,py,w,dir,NULL,thismoves,&myfails,table,letter,0)==true)
+						nanosleep(&delay,NULL);
+					else
+						printf("Failed Moving in NEW Dir \n");
+				}
+				if(Move(smap_id,px,py,w,dir,NULL,next,&myfails,table,letter,0)==true)
+					nanosleep(&delay,NULL);
+				else
+				{
+					ok=false;
+					printf("Failed Moving in OLD Dir \n");
+				}
+				printf("FAILS = %d\n",myfails);
+			if(myfails<4 && ok==true)
+				return true;
+			else
+				ok=false;
+		}
+	}
+
+	if(ok==false)
+	{
+		return false;
+	}
 }
