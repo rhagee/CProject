@@ -24,6 +24,7 @@
 #define true 1
 #define false 0
 
+void DelUselessMoves(int dir[]);
 int Move(int smap_id,int* px,int* py,int w,int dir[],int* pindex,int index,int* pfailed,cell* table,char letter,int nextCardinal);
 int getPos(int,int,int);
 int findOtherPath(int dir[],cell* table,int,int,int*,int*,int,char,struct timespec delay,int type);
@@ -31,14 +32,18 @@ int findOtherPath(int dir[],cell* table,int,int,int*,int*,int,char,struct timesp
 int main(int argc,char* argv[])
 {
 	struct timespec delay;
+
 	char letter;
 	int term;
-	int posMsg_id,instrMsg_id,opt_id,map_id,smap_id,sync_id,index,x,y,w,h;
+	int moves;
+	int posMsg_id,instrMsg_id,leftMoves_id,newPos_id,opt_id,map_id,smap_id,sync_id,index,x,y,w,h;
 	int dir[4];
 	int failed;
 	long type;
 	posMsg pos_message;
 	instrMsg instr_message;
+	numMsg leftMoves;
+	numMsg newPos;
 	cell* table;
 	options* settings;
 
@@ -50,6 +55,8 @@ int main(int argc,char* argv[])
 	type = longconvert(6);
 	instrMsg_id=intconvert(7);
 	sync_id=intconvert(8);
+	leftMoves_id=intconvert(9);
+	newPos_id = intconvert(10);
 	settings=getOptions(opt_id);
 	failed=0;
 	term=0;
@@ -64,6 +71,7 @@ int main(int argc,char* argv[])
 	y=pos_message.y;
 	w=settings->SO_BASE;
 	h=settings->SO_ALTEZZA;
+	moves=settings->SO_N_MOVES;
 	/* Init of directions */
 	dir[N]=0;
 	dir[S]=0;
@@ -82,33 +90,10 @@ int main(int argc,char* argv[])
 		dir[S]+=instr_message.dir[S];
 		dir[W]+=instr_message.dir[W];
 		dir[E]+=instr_message.dir[E];
+
 		/*Delete useless moves*/
-		if(dir[N]>0 && dir[S]>0)
-		{
-			if(dir[N]>dir[S])
-			{
-				dir[N]=dir[N]-dir[S];
-				dir[S]=0;
-			}
-			else
-			{
-				dir[S]=dir[S]-dir[N];
-				dir[N]=0;
-			}
-		}
-			if(dir[W]>0 && dir[E]>0)
-		{
-			if(dir[W]>dir[E])
-			{
-				dir[W]=dir[W]-dir[E];
-				dir[E]=0;
-			}
-			else
-			{
-				dir[E]=dir[E]-dir[W];
-				dir[W]=0;
-			}
-		}
+		DelUselessMoves(dir);
+
 		index=0;
 		while((dir[N]>0 || dir[S]>0 || dir[W]>0 || dir[E]>0) && term==0 && table[getPos((x+dir[E]-dir[W]),(y+dir[S]-dir[N]),w)].type=='f')
 		{
@@ -118,6 +103,10 @@ int main(int argc,char* argv[])
 					index++;
 				else
 					index=0;
+			}
+			else if(moves==0)
+			{
+				term=STOPMOVE;
 			}
 			else if(failed>=4)
 			{
@@ -152,27 +141,29 @@ int main(int argc,char* argv[])
 			}
 			else
 			{
-				if(index<3)
-				{
-					if(Move(smap_id,&x,&y,w,dir,&index,index,&failed,table,letter,index+1)==true)
+					if(Move(smap_id,&x,&y,w,dir,&index,index,&failed,table,letter,((index+1)%4))==true)
+					{
 						nanosleep(&delay,NULL);
-				}
-				else
-				{
-					if(Move(smap_id,&x,&y,w,dir,&index,index,&failed,table,letter,0)==true)
-						nanosleep(&delay,NULL);
-				}
+						moves--;
+					}
 			}
 		}
 		if(dir[N]+dir[S]+dir[W]+dir[E]>0 && failed!=2)
 		{
-			printf("MISS for Pawn : %c-%d -> MY LAST INDEXES N:%d S:%d W:%d E: %d\n",letter,type,dir[N],dir[S],dir[W],dir[E]);
+			printf("MISS for Pawn : %c-%d -> MY LAST INDEXES N:%d S:%d W:%d E: %d and Moves Left : %d\n",letter,type,dir[N],dir[S],dir[W],dir[E],moves);
 		}
 		else if(instr_message.left>=0)
 		{
-			printf("HIT for Pawn : %c-%d -> MY LAST INDEXES N:%d S:%d W:%d E: %d\n",letter,type,dir[N],dir[S],dir[W],dir[E]);
+			printf("HIT for Pawn : %c-%d -> MY LAST INDEXES N:%d S:%d W:%d E: %d and Moves Left : %d\n",letter,type,dir[N],dir[S],dir[W],dir[E],moves);
 		}
 	}
+	/*Send Message With Number of Left Moves*/
+	leftMoves.type=type;
+	leftMoves.q = moves;	
+	send_numMsg(leftMoves_id,&leftMoves);
+	newPos.type=type;
+	newPos.q=getPos(x,y,w);
+	send_numMsg(newPos_id,&newPos);
 	exit(0);
 }
 
@@ -459,16 +450,16 @@ int findOtherPath(int dir[],cell* table,int w,int h,int* px,int* py,int smap_id,
 					else
 						printf("Failed Moving in NEW Dir \n");
 				}
-				if(Move(smap_id,px,py,w,dir,NULL,next,&myfails,table,letter,0)==true)
-					nanosleep(&delay,NULL);
-				else
-				{
-					ok=false;
-					printf("Failed Moving in OLD Dir \n");
-				}
-				printf("FAILS = %d\n",myfails);
+
+				while(Move(smap_id,px,py,w,dir,NULL,next,&myfails,table,letter,0)!=true && myfails<4);
+						nanosleep(&delay,NULL);
+				if(myfails>=4)			
+						printf("Failed Moving in OLD Dir \n");
 			if(myfails<4 && ok==true)
+			{
+				printf("GOOD FAILS = %d\n",myfails);
 				return true;
+			}
 			else
 				ok=false;
 		}
@@ -478,4 +469,35 @@ int findOtherPath(int dir[],cell* table,int w,int h,int* px,int* py,int smap_id,
 	{
 		return false;
 	}
+}
+
+
+void DelUselessMoves(int dir[])
+{
+	if(dir[N]>0 && dir[S]>0)
+		{
+			if(dir[N]>dir[S])
+			{
+				dir[N]=dir[N]-dir[S];
+				dir[S]=0;
+			}
+			else
+			{
+				dir[S]=dir[S]-dir[N];
+				dir[N]=0;
+			}
+		}
+			if(dir[W]>0 && dir[E]>0)
+		{
+			if(dir[W]>dir[E])
+			{
+				dir[W]=dir[W]-dir[E];
+				dir[E]=0;
+			}
+			else
+			{
+				dir[E]=dir[E]-dir[W];
+				dir[W]=0;
+			}
+		}
 }

@@ -115,7 +115,9 @@ int main()
 	Print_Status(w,h,table,smap_id);
 	semReserve(sync_id,ROUNDSTART,0);
 	semWaitZero(sync_id,ALLSTARTED,0);
-	alarm(timeleft);
+
+	
+	/*alarm(timeleft);*/
 
 	/*Dovrò spostarlo in un HANDLER di fine round, questi semafori verranno SBLOCCATI prima di sbloccare l'END Round ai player
 	Ovviamente ENDRound avrà un controllo su "tutti hanno letto", a quel punto verrà resettato insieme al TUTTI hanno letto

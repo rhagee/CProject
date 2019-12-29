@@ -34,7 +34,7 @@ struct PathObject
 
 typedef struct PathObject PathObj;
 
-void SpawnPawns(int opt_id,int map_id,int smap_id,int posMsg_id,int instrMsg_id,int sync_id,int n_pawns,char letter[],int* pawns,int w,int h);
+void SpawnPawns(int opt_id,int map_id,int smap_id,int posMsg_id,int instrMsg_id,int sync_id,int leftPawnMoves_id,int newPawnPos_id,int n_pawns,char letter[],int* pawns,int w,int h);
 int rndPos(int w,int h,int smap_id);
 void GameStart(int n_pawns,int n_players,int pawn_sync,int posMsg_id,int mynumber,int w,int h,int smap_id,cell* table,int letter,int* pawnPos);
 void getFlagPos(int size,cell* table,int flagPos[]);
@@ -47,6 +47,9 @@ void PawnInit(int w,int h,int smap_id,int posMsg_id,cell* table,int letter,long 
 void Print_Table(int w,int h,cell* table);
 void Print_TStatus(int w,int h,cell* table);
 void getPos(int* x,int* y,int pos,int w);
+void InitPawnMoves(int pawnMoves[],options* settings);
+void readLeftMoves(int leftPawnMoves_id,int pawnMoves[],int n_pawns);
+void readNewPos(int newPawnPos_id,int pawnPos[],int n_pawns);
 void ClosingRoutine(int,int);
 
 int main(int argc,char* argv[])
@@ -54,9 +57,10 @@ int main(int argc,char* argv[])
 	int n_pawns,w,h;
 	int* pawns;
 	int* pawnPos;
+	int* pawnMoves;
 	int* flagPos;
 	int i=0,j=0;
-	int opt_id,map_id,smap_id,sync_id,pawn_sync,mynumber,n_players,posMsg_id,instrMsg_id,numMsg_id;
+	int opt_id,map_id,smap_id,sync_id,pawn_sync,mynumber,n_players,posMsg_id,instrMsg_id,numMsg_id,leftPawnMoves_id,newPawnPos_id;
 	long type;
 	char letter;
 	char* letter_s;
@@ -78,6 +82,8 @@ int main(int argc,char* argv[])
 
 	posMsg_id=instanceMsg();
 	instrMsg_id=instanceMsg();
+	leftPawnMoves_id=instanceMsg();
+	newPawnPos_id=instanceMsg();
 	/*Taking Shared Memory*/
 	settings = getOptions(opt_id);
 	table = getMap(map_id);
@@ -86,6 +92,7 @@ int main(int argc,char* argv[])
 	n_pawns=settings->SO_NUM_P;
 	n_players=settings->SO_NUM_G;
 	pawnPos=malloc(sizeof(int)*n_pawns);
+	pawnMoves=malloc(sizeof(int)*n_pawns);
 	
 	printf("Waiting ALLPLAYERSYNC\n");
 	/*Wait all players Spawned*/
@@ -94,19 +101,27 @@ int main(int argc,char* argv[])
 	/* Create Pawns and Set them up */
 	printf("Syncronizing and Setting Up Pawns \n");
 
-	SpawnPawns(opt_id,map_id,smap_id,posMsg_id,instrMsg_id,sync_id,n_pawns,letter_s,pawns,w,h);
+	SpawnPawns(opt_id,map_id,smap_id,posMsg_id,instrMsg_id,sync_id,leftPawnMoves_id,newPawnPos_id,n_pawns,letter_s,pawns,w,h);
 	GameStart(n_pawns,n_players,pawn_sync,posMsg_id,mynumber,w,h,smap_id,table,letter,pawnPos);
 
 	printf("End Placing Pawns %c - PID : %d \n",letter,getpid());
 
 	semReserve(sync_id,MASTERSYNC,0);
 
+	InitPawnMoves(pawnMoves,settings);
+
 	read_numMsg(numMsg_id,&n_flags,type);
+	
+
 	flagPos=malloc(sizeof(int)*n_flags.q);
 	SendDirective(w,h,pawnPos,instrMsg_id,table,n_pawns,flagPos,n_flags.q,letter);
 	semReserve(sync_id,ROUNDSYNC,0);
 	semWaitZero(sync_id,ROUNDSTART,0);
 	semReserve(sync_id,ALLSTARTED,0);
+
+	readLeftMoves(leftPawnMoves_id,pawnMoves,n_pawns);
+	readNewPos(newPawnPos_id,pawnPos,n_pawns);
+
 	while(wait(NULL)!=-1);
 	free(pawnPos);
 	free(pawns);
@@ -115,7 +130,7 @@ int main(int argc,char* argv[])
 	exit(0);
 }
 
-void SpawnPawns(int opt_id,int map_id,int smap_id,int posMsg_id,int instrMsg_id,int sync_id,int n_pawns,char letter[],int* pawns,int w,int h)
+void SpawnPawns(int opt_id,int map_id,int smap_id,int posMsg_id,int instrMsg_id,int sync_id,int leftPawnMoves_id,int newPawnPos_id,int n_pawns,char letter[],int* pawns,int w,int h)
 {
 	char opt_id_s[10];
 	char map_id_s[10];
@@ -124,7 +139,9 @@ void SpawnPawns(int opt_id,int map_id,int smap_id,int posMsg_id,int instrMsg_id,
 	char instrMsg_id_s[10];
 	char sync_id_s[10];
 	char pos_s[10];
-	char* argv[9];
+	char leftPawnMoves_id_s[10];
+	char newPawnPos_id_s[10];
+	char* argv[12];
 	int i=0;
 	pawns=malloc(sizeof(int)*(n_pawns));
 
@@ -135,6 +152,8 @@ void SpawnPawns(int opt_id,int map_id,int smap_id,int posMsg_id,int instrMsg_id,
 	sprintf(posMsg_id_s,"%d",posMsg_id);
 	sprintf(instrMsg_id_s,"%d",instrMsg_id);
 	sprintf(sync_id_s,"%d",sync_id);
+	sprintf(leftPawnMoves_id_s,"%d",leftPawnMoves_id);
+	sprintf(newPawnPos_id_s,"%d",newPawnPos_id);
 
 	/*Prepare Argv*/
 	argv[0] = "./pawn";
@@ -145,7 +164,9 @@ void SpawnPawns(int opt_id,int map_id,int smap_id,int posMsg_id,int instrMsg_id,
 	argv[5] = posMsg_id_s;
 	argv[7] = instrMsg_id_s;
 	argv[8] = sync_id_s;
-	argv[9] = NULL;
+	argv[9] = leftPawnMoves_id_s;
+	argv[10] = newPawnPos_id_s;
+	argv[11] = NULL;
 	for(i=0;i<n_pawns;i++)
 	{
 		sprintf(pos_s,"%d",(i+1));
@@ -499,6 +520,38 @@ void getPos(int* x,int* y,int pos,int w)
 	*x=(pos%w);
 	*y=(pos/w);
 }
+
+void InitPawnMoves(int pawnMoves[],options* settings)
+{
+	int i=0;
+	for(i=0;i<settings->SO_NUM_P;i++)
+	{
+		pawnMoves[i]=settings->SO_N_MOVES;
+	}
+}
+
+void readLeftMoves(int leftPawnMoves_id,int pawnMoves[],int n_pawns)
+{
+	int i=0;
+	numMsg leftPawnMoves;
+	for(i<0;i<n_pawns;i++)
+	{
+		read_numMsg(leftPawnMoves_id,&leftPawnMoves,0);
+		pawnMoves[(leftPawnMoves.type-1)]=leftPawnMoves.q;
+	}
+}
+
+void readNewPos(int newPawnPos_id,int pawnPos[],int n_pawns)
+{
+	int i=0;
+	numMsg newPawnPos;
+	for(i<0;i<n_pawns;i++)
+	{
+		read_numMsg(newPawnPos_id,&newPawnPos,0);
+		pawnPos[(newPawnPos.type-1)]=newPawnPos.q;
+	}
+}
+
 void ClosingRoutine(int instrMsg_id,int posMsg_id)
 {
 	msgctl(instrMsg_id, IPC_RMID, NULL);
