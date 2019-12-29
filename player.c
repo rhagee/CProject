@@ -38,11 +38,11 @@ void SpawnPawns(int opt_id,int map_id,int smap_id,int posMsg_id,int instrMsg_id,
 int rndPos(int w,int h,int smap_id);
 void GameStart(int n_pawns,int n_players,int pawn_sync,int posMsg_id,int mynumber,int w,int h,int smap_id,cell* table,int letter,int* pawnPos);
 void getFlagPos(int size,cell* table,int flagPos[]);
-void Algorithm(int w,int h,int pos,int pawnPos,int flagPos[],int n_flags,Move assoc[]);
+void Algorithm(int w,int h,int pos,int pawnPos,int moves,int flagPos[],int n_flags,Move assoc[]);
 void insertPath(PathObj* Path,int n_flags,int flagPos[],int pos,int flagIndex,int flagDistance,int w);
 void PathSender(int instrMsg_id,instrMsg* message,long type,int pawn,PathObj pawnFlag[],int length,int pawnPos[],int flagPos[],int w);
 void PathCalculator(int flagPos,int pawnPos,instrMsg* message,int w);
-void SendDirective(int,int,int pawnPos[],int,cell*,int,int flagPos[],int n_flags,int letter);
+void SendDirective(int,int,int pawnPos[],int pawnMoves[],int,cell*,int,int flagPos[],int n_flags,int letter);
 void PawnInit(int w,int h,int smap_id,int posMsg_id,cell* table,int letter,long type,int* pawnPos);
 void Print_Table(int w,int h,cell* table);
 void Print_TStatus(int w,int h,cell* table);
@@ -114,7 +114,7 @@ int main(int argc,char* argv[])
 	
 
 	flagPos=malloc(sizeof(int)*n_flags.q);
-	SendDirective(w,h,pawnPos,instrMsg_id,table,n_pawns,flagPos,n_flags.q,letter);
+	SendDirective(w,h,pawnPos,pawnMoves,instrMsg_id,table,n_pawns,flagPos,n_flags.q,letter);
 	semReserve(sync_id,ROUNDSYNC,0);
 	semWaitZero(sync_id,ROUNDSTART,0);
 	semReserve(sync_id,ALLSTARTED,0);
@@ -219,7 +219,7 @@ void GameStart(int n_pawns,int n_players,int pawn_sync,int posMsg_id,int mynumbe
 	}
 }
 
-void SendDirective(int w,int h,int pawnPos[],int instrMsg_id,cell* table,int n_pawns,int flagPos[],int n_flags,int letter)
+void SendDirective(int w,int h,int pawnPos[],int pawnMoves[],int instrMsg_id,cell* table,int n_pawns,int flagPos[],int n_flags,int letter)
 {
 	int i=0,j=0,cont=0;
 	Move* assoc;
@@ -238,7 +238,8 @@ void SendDirective(int w,int h,int pawnPos[],int instrMsg_id,cell* table,int n_p
 	for(j=0;j<n_flags;j++)
 		for(i=0;i<n_pawns;i++)
 		{
-			Algorithm(w,h,pawnPos[i],i,flagPos,n_flags,assoc);
+			if(pawnMoves[i]>0)
+				Algorithm(w,h,pawnPos[i],i,pawnMoves[i],flagPos,n_flags,assoc);
 		}
 
 	printf("			---------------------------------letter %c------------------------------\n",letter);
@@ -295,7 +296,7 @@ void getFlagPos(int size,cell* table,int flagPos[])
 	}
 }
 
-void Algorithm(int w,int h,int pos,int pawnPos,int flagPos[],int n_flags,Move assoc[])
+void Algorithm(int w,int h,int pos,int pawnPos,int moves,int flagPos[],int n_flags,Move assoc[])
 {
 	int i=0,j=0,z=0,found=0;
 	int startX,startY,endX,endY,fX,fY;
@@ -312,7 +313,7 @@ void Algorithm(int w,int h,int pos,int pawnPos,int flagPos[],int n_flags,Move as
 		found=0;
 		getPos(&endX,&endY,flagPos[i],w);
 		currdist=(abs(startX-endX)+abs(startY-endY));
-		if(currdist<=assoc[i].distance || assoc[i].pawnPos==-1)
+		if((currdist<=assoc[i].distance || assoc[i].pawnPos==-1) && currdist<=moves)
 		{
 			for(j=0;j<n_flags && found!=1;j++)
 			{
@@ -320,7 +321,7 @@ void Algorithm(int w,int h,int pos,int pawnPos,int flagPos[],int n_flags,Move as
 				{
 					getPos(&fX,&fY,flagPos[Path[j-1].flagIndex],w);
 					pathdist=(abs(endX-fX)+abs(endY-fY))+Path[j-1].flagDistance;
-					if((pathdist<Path[j].flagDistance || Path[j].flagIndex==-1) && (pathdist<=assoc[i].distance || assoc[i].pawnPos==-1))
+					if((pathdist<Path[j].flagDistance || Path[j].flagIndex==-1) && (pathdist<=assoc[i].distance || assoc[i].pawnPos==-1) && pathdist<=moves)
 					{
 						insertPath(Path,n_flags,flagPos,j,i,pathdist,w);
 						found=1;
@@ -328,7 +329,7 @@ void Algorithm(int w,int h,int pos,int pawnPos,int flagPos[],int n_flags,Move as
 				}
 				else
 				{
-					if((currdist<Path[j].flagDistance || Path[j].flagIndex==-1) && (currdist<=assoc[i].distance || assoc[i].pawnPos==-1))
+					if((currdist<Path[j].flagDistance || Path[j].flagIndex==-1) && (currdist<=assoc[i].distance || assoc[i].pawnPos==-1) && currdist<=moves)
 					{
 						insertPath(Path,n_flags,flagPos,j,i,currdist,w);
 						found=1;

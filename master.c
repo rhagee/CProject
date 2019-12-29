@@ -25,7 +25,7 @@
 			"\n%*s %d %*d"\
 			"\n%*s %d %*d"\
 			"\n%*s %d %*d"\
-			"\n%*s %d %*d"
+			"\n%*s %ld %*ld"
 #define HARD_MODE \
 			"%*s %*d %d"\
 			"\n%*s %*d %d"\
@@ -36,7 +36,7 @@
 			"\n%*s %*d %d"\
 			"\n%*s %*d %d"\
 			"\n%*s %*d %d"\
-			"\n%*s %*d %d"
+			"\n%*s %*ld %ld"
 #define TEST_ERROR    if (errno) {fprintf(stderr, \
 					   "%s:%d: PID=%5d: Error %d (%s)\n",\
 					   __FILE__,\
@@ -47,7 +47,7 @@
 #define WARN_NPLAYERS printf("\n\n\n\nWARN!\nNUMERO USERNAME GIOCATORI SUPERATO : possibile errore nella visualizzazione\n");
 
 																	/* Methods Declaration */
-void Read_Settings(int*,int*,int*,int*,int*,int*,int*,int*,int*,int*);
+void Read_Settings(int*,int*,int*,int*,int*,int*,int*,int*,int*,long*);
 void Init_Table(int,int,cell*);
 void Print_Table(int,int,cell*);
 void Print_Status(int,int,cell*,int);
@@ -116,7 +116,7 @@ int main()
 	semReserve(sync_id,ROUNDSTART,0);
 	semWaitZero(sync_id,ALLSTARTED,0);
 
-	
+
 	/*alarm(timeleft);*/
 
 	/*Dovrò spostarlo in un HANDLER di fine round, questi semafori verranno SBLOCCATI prima di sbloccare l'END Round ai player
@@ -224,7 +224,7 @@ SO_N_MOVES 20 200
 SO_MIN_HOLD_NSEC 100000000 100000000
 */
 
-void Read_Settings(int* SO_NUM_G,int* SO_NUM_P,int* SO_MAX_TIME,int* SO_BASE,int* SO_ALTEZZA,int* SO_FLAG_MIN,int* SO_FLAG_MAX,int* SO_ROUND_SCORE,int* SO_N_MOVES,int* SO_MIN_HOLD_NSEC)
+void Read_Settings(int* SO_NUM_G,int* SO_NUM_P,int* SO_MAX_TIME,int* SO_BASE,int* SO_ALTEZZA,int* SO_FLAG_MIN,int* SO_FLAG_MAX,int* SO_ROUND_SCORE,int* SO_N_MOVES,long* SO_MIN_HOLD_NSEC)
 {
 	FILE * file;
 	int gamemode;

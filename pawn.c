@@ -62,7 +62,7 @@ int main(int argc,char* argv[])
 	term=0;
 
 	delay.tv_sec=0;
-	delay.tv_nsec=100000000L;
+	delay.tv_nsec=settings->SO_MIN_HOLD_NSEC;
 	table=getMap(map_id);
 	read_posMsg(posMsg_id,&pos_message,type);
 	instr_message.left=1;
