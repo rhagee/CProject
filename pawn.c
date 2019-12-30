@@ -216,9 +216,13 @@ int Move(int smap_id,int* px,int* py,int w,int dir[],int* pindex,int index,int* 
 	}
 	else
 	{
-		semRelease(smap_id,actualpos,0);
+		if(table[nextpos].type='f')
+		{
+
+		}
 		table[actualpos].val=0;
 		table[actualpos].type='z';
+		semRelease(smap_id,actualpos,0);
 		*pfailed=0;
 		table[nextpos].val=letter;
 		table[nextpos].type='p';
@@ -273,7 +277,6 @@ int findOtherPath(int dir[],cell* table,int w,int h,int* px,int* py,int smap_id,
 		nextdir[q]=W;
 		q++;
 	}
-	printf("Cycling q%d times for pawn %c-%d\n",q,letter,type);
 	for(j=0;j<q && ok==false;j++)
 	{
 		plusMoves=0;
@@ -281,7 +284,6 @@ int findOtherPath(int dir[],cell* table,int w,int h,int* px,int* py,int smap_id,
 		foundplus=false;
 		foundminus=false;
 		ok=false;
-		printf("Cycling %d\n",nextdir[j]);
 		switch(nextdir[j])
 		{
 			case S:

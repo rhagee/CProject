@@ -50,7 +50,7 @@ void getPos(int* x,int* y,int pos,int w);
 void InitPawnMoves(int pawnMoves[],options* settings);
 void readLeftMoves(int leftPawnMoves_id,int pawnMoves[],int n_pawns);
 void readNewPos(int newPawnPos_id,int pawnPos[],int n_pawns);
-void ClosingRoutine(int,int);
+void ClosingRoutine(int,int,int,int,int);
 
 int main(int argc,char* argv[])
 {
@@ -60,7 +60,7 @@ int main(int argc,char* argv[])
 	int* pawnMoves;
 	int* flagPos;
 	int i=0,j=0;
-	int opt_id,map_id,smap_id,sync_id,pawn_sync,mynumber,n_players,posMsg_id,instrMsg_id,numMsg_id,leftPawnMoves_id,newPawnPos_id;
+	int opt_id,map_id,smap_id,sync_id,pawn_sync,mynumber,n_players,posMsg_id,instrMsg_id,numMsg_id,leftPawnMoves_id,newPawnPos_id,scoreMsg_id,pawnScoredMsg_id;
 	long type;
 	char letter;
 	char* letter_s;
@@ -78,12 +78,15 @@ int main(int argc,char* argv[])
 	mynumber=intconvert(6);
 	pawn_sync=intconvert(7);
 	numMsg_id=intconvert(8);
+	scoreMsg_id=intconvert(9);
 	type=mynumber+1;
 
 	posMsg_id=instanceMsg();
 	instrMsg_id=instanceMsg();
 	leftPawnMoves_id=instanceMsg();
 	newPawnPos_id=instanceMsg();
+	pawnScoredMsg_id=instanceMsg();
+
 	/*Taking Shared Memory*/
 	settings = getOptions(opt_id);
 	table = getMap(map_id);
@@ -125,7 +128,7 @@ int main(int argc,char* argv[])
 	while(wait(NULL)!=-1);
 	free(pawnPos);
 	free(pawns);
-	ClosingRoutine(instrMsg_id,posMsg_id);
+	ClosingRoutine(instrMsg_id,posMsg_id,newPawnPos_id,leftPawnMoves_id,pawnScoredMsg_id);
 	/*Print_Table(w,h,table);*/
 	exit(0);
 }
@@ -313,7 +316,7 @@ void Algorithm(int w,int h,int pos,int pawnPos,int moves,int flagPos[],int n_fla
 		found=0;
 		getPos(&endX,&endY,flagPos[i],w);
 		currdist=(abs(startX-endX)+abs(startY-endY));
-		if((currdist<=assoc[i].distance || assoc[i].pawnPos==-1) && currdist<=moves)
+		if((currdist<assoc[i].distance || assoc[i].pawnPos==-1 || assoc[i].pawnPos==pawnPos) && currdist<=moves)
 		{
 			for(j=0;j<n_flags && found!=1;j++)
 			{
@@ -321,7 +324,7 @@ void Algorithm(int w,int h,int pos,int pawnPos,int moves,int flagPos[],int n_fla
 				{
 					getPos(&fX,&fY,flagPos[Path[j-1].flagIndex],w);
 					pathdist=(abs(endX-fX)+abs(endY-fY))+Path[j-1].flagDistance;
-					if((pathdist<Path[j].flagDistance || Path[j].flagIndex==-1) && (pathdist<=assoc[i].distance || assoc[i].pawnPos==-1) && pathdist<=moves)
+					if((pathdist<Path[j].flagDistance || Path[j].flagIndex==-1) && (pathdist<assoc[i].distance || assoc[i].pawnPos==-1 || assoc[i].pawnPos==pawnPos) && pathdist<=moves)
 					{
 						insertPath(Path,n_flags,flagPos,j,i,pathdist,w);
 						found=1;
@@ -329,7 +332,7 @@ void Algorithm(int w,int h,int pos,int pawnPos,int moves,int flagPos[],int n_fla
 				}
 				else
 				{
-					if((currdist<Path[j].flagDistance || Path[j].flagIndex==-1) && (currdist<=assoc[i].distance || assoc[i].pawnPos==-1) && currdist<=moves)
+					if((currdist<Path[j].flagDistance || Path[j].flagIndex==-1) && (currdist<assoc[i].distance || assoc[i].pawnPos==-1 || assoc[i].pawnPos==pawnPos) && currdist<=moves)
 					{
 						insertPath(Path,n_flags,flagPos,j,i,currdist,w);
 						found=1;
@@ -342,7 +345,7 @@ void Algorithm(int w,int h,int pos,int pawnPos,int moves,int flagPos[],int n_fla
 	found =0;
 	for(i=0;i<n_flags && found!=1;i++)
 	{
-		if(Path[i].flagDistance <= assoc[Path[i].flagIndex].distance || assoc[Path[i].flagIndex].pawnPos==-1)
+		if((Path[i].flagDistance <= assoc[Path[i].flagIndex].distance || assoc[Path[i].flagIndex].pawnPos==-1) && Path[i].flagIndex!=-1)
 		{
 			assoc[Path[i].flagIndex].distance=Path[i].flagDistance;
 			assoc[Path[i].flagIndex].pawnPos=pawnPos;
@@ -553,8 +556,12 @@ void readNewPos(int newPawnPos_id,int pawnPos[],int n_pawns)
 	}
 }
 
-void ClosingRoutine(int instrMsg_id,int posMsg_id)
+void ClosingRoutine(int instrMsg_id,int posMsg_id,int leftPawnMoves_id,int newPawnPos_id,int pawnScoredMsg_id)
 {
 	msgctl(instrMsg_id, IPC_RMID, NULL);
 	msgctl(posMsg_id, IPC_RMID, NULL);
+	msgctl(leftPawnMoves_id, IPC_RMID, NULL);
+	msgctl(newPawnPos_id, IPC_RMID, NULL);
+	msgctl(pawnScoredMsg_id,IPC_RMID,NULL);
+
 }

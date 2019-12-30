@@ -51,13 +51,13 @@ void Read_Settings(int*,int*,int*,int*,int*,int*,int*,int*,int*,long*);
 void Init_Table(int,int,cell*);
 void Print_Table(int,int,cell*);
 void Print_Status(int,int,cell*,int);
-void createPlayers(int,int,int,int,int*,int,int,int,int);
+void createPlayers(int,int,int,int,int*,int*,int,int,int,int,int);
 void Round_Start(int,int,int,int,cell*,int,int,int,int);
 void SendNFlags(int,int,int);
 int Flag_Calc(int,int);
 void Flag_ValAndPlace(int,int,cell*,int,int);
 void FlagPlace(cell*,int,int,int);
-void ClosingRoutine(cell* table,options* settings,int map_id,int opt_id,int smap_id,int sync_id,int pawn_sync,int* players,int numMsg_id);
+void ClosingRoutine(cell* table,options* settings,int map_id,int opt_id,int smap_id,int sync_id,int pawn_sync,int* players,int numMsg_id,int);
 
 
 int main()
@@ -66,9 +66,10 @@ int main()
 	/*Larghezza,Altezza,NumeroGiocatori*/
 	int w,h,n_players,f_min,f_max,f_tot,n_pawns,score,timeleft;
 	/*IDGrigliaGioco,IDOpzioni,IDSemaforiGriglia,IDSemSync*/		
-	int map_id,opt_id,smap_id,sync_id,pawn_sync,numMsg_id;
+	int map_id,opt_id,smap_id,sync_id,pawn_sync,numMsg_id,scoreMsg_id;
 	/*Vettore di PID giocatore*/
 	int* players;
+	int* scores;
 	/*Puntatori alle Aree di memoria*/
 	cell *table;
 	options* settings;
@@ -90,17 +91,19 @@ int main()
 	timeleft=settings->SO_MAX_TIME;
 																	/*Create Map*/
 	players=malloc(sizeof(int)*(n_players));
+	scores=malloc(sizeof(int)*(n_players));
 	map_id=instanceMap(w,h);
 	table = getMap(map_id);
 	smap_id=instanceSem(w*h);
 	sync_id=instanceSem(5);
 	pawn_sync=instanceSem(n_players);
 	numMsg_id=instanceMsg();
+	scoreMsg_id=instanceMsg();
 																	/*Initialize Table*/
 	Init_Table(w,h,table);
 
 																	/*Create Players*/
-	createPlayers(opt_id,map_id,n_players,n_pawns,players,smap_id,sync_id,pawn_sync,numMsg_id);
+	createPlayers(opt_id,map_id,n_players,n_pawns,players,scores,smap_id,sync_id,pawn_sync,numMsg_id,scoreMsg_id);
 	Print_Status(w,h,table,smap_id);
 	printf("WAITING PLAYERS SYNC...\n",sync_id);
 	semWaitZero(sync_id,MASTERSYNC,0);
@@ -139,12 +142,12 @@ int main()
 	while(wait(NULL)!=-1);
 	Print_Table(w,h,table);
 	Print_Status(w,h,table,smap_id);
-	ClosingRoutine(table,settings,map_id,opt_id,smap_id,sync_id,pawn_sync,players,numMsg_id);
+	ClosingRoutine(table,settings,map_id,opt_id,smap_id,sync_id,pawn_sync,players,numMsg_id,scoreMsg_id);
 }
 
 
 
-void createPlayers(int opt_id,int map_id,int n_players,int n_pawns,int* players,int smap_id,int sync_id,int pawn_sync,int numMsg_id)
+void createPlayers(int opt_id,int map_id,int n_players,int n_pawns,int* players,int* scores,int smap_id,int sync_id,int pawn_sync,int numMsg_id,int scoreMsg_id)
 {
 	char opt_id_s[10];
 	char map_id_s[10];
@@ -152,9 +155,10 @@ void createPlayers(int opt_id,int map_id,int n_players,int n_pawns,int* players,
 	char sync_id_s[10];
 	char pawn_sync_s[10];
 	char numMsg_id_s[10];
+	char scoreMsg_id_s[10];
 	char mynumber[10];
 	char letter[10];
-	char* argv[10];
+	char* argv[11];
 	int i=0;
 
 	sprintf(opt_id_s, "%d", opt_id);
@@ -163,6 +167,7 @@ void createPlayers(int opt_id,int map_id,int n_players,int n_pawns,int* players,
 	sprintf(sync_id_s,"%d", sync_id);
 	sprintf(pawn_sync_s,"%d", pawn_sync);
 	sprintf(numMsg_id_s,"%d", numMsg_id);
+	sprintf(scoreMsg_id_s,"%d",scoreMsg_id);
 	argv[0] = "./player";
 	argv[1] = opt_id_s;
 	argv[2] = map_id_s;
@@ -170,7 +175,8 @@ void createPlayers(int opt_id,int map_id,int n_players,int n_pawns,int* players,
 	argv[4] = sync_id_s;
 	argv[7] = pawn_sync_s;
 	argv[8] = numMsg_id_s;
-	argv[9] = NULL;
+	argv[9] = scoreMsg_id_s;
+	argv[10] = NULL;
 	semSet(sync_id,MASTERSYNC,n_players);
 	semSet(sync_id,ALLPLAYERSYNC,1);
 	semSet(sync_id,ROUNDSYNC,n_players);
@@ -205,6 +211,7 @@ void createPlayers(int opt_id,int map_id,int n_players,int n_pawns,int* players,
 			break;
 			default:
 					printf("Player %c - PID : %d\n",atoi(letter),players[i]);
+					scores[i] = 0;
 			break;
 		}
 	}
@@ -322,7 +329,7 @@ void FlagPlace(cell* table,int smap_id,int size,int value)
 
 
 
-void ClosingRoutine(cell* table,options* settings,int map_id,int opt_id,int smap_id,int sync_id,int pawn_sync,int* players,int numMsg_id)
+void ClosingRoutine(cell* table,options* settings,int map_id,int opt_id,int smap_id,int sync_id,int pawn_sync,int* players,int numMsg_id,int scoreMsg_id)
 {
 	free(players);
 	shmdt(table);
@@ -333,6 +340,7 @@ void ClosingRoutine(cell* table,options* settings,int map_id,int opt_id,int smap
 	semctl(sync_id,0,IPC_RMID);
 	semctl(pawn_sync,0,IPC_RMID);
 	msgctl(numMsg_id,IPC_RMID, NULL);
+	msgctl(scoreMsg_id,IPC_RMID,NULL);
 }
 
 void Print_Table(int w,int h,cell* table)
