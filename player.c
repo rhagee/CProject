@@ -34,7 +34,7 @@ struct PathObject
 
 typedef struct PathObject PathObj;
 
-void SpawnPawns(int opt_id,int map_id,int smap_id,int posMsg_id,int instrMsg_id,int sync_id,int leftPawnMoves_id,int newPawnPos_id,int n_pawns,char letter[],int* pawns,int w,int h);
+void SpawnPawns(int pawnScoredMsg_id,int opt_id,int map_id,int smap_id,int posMsg_id,int instrMsg_id,int sync_id,int leftPawnMoves_id,int newPawnPos_id,int n_pawns,char letter[],int* pawns,int w,int h);
 int rndPos(int w,int h,int smap_id);
 void GameStart(int n_pawns,int n_players,int pawn_sync,int posMsg_id,int mynumber,int w,int h,int smap_id,cell* table,int letter,int* pawnPos);
 void getFlagPos(int size,cell* table,int flagPos[]);
@@ -51,6 +51,7 @@ void InitPawnMoves(int pawnMoves[],options* settings);
 void readLeftMoves(int leftPawnMoves_id,int pawnMoves[],int n_pawns);
 void readNewPos(int newPawnPos_id,int pawnPos[],int n_pawns);
 void ClosingRoutine(int,int,int,int,int);
+void waitScores(int pawnScoredMsg_id,int n_flags,int scoreMsg_id,int type);
 
 int main(int argc,char* argv[])
 {
@@ -104,7 +105,7 @@ int main(int argc,char* argv[])
 	/* Create Pawns and Set them up */
 	printf("Syncronizing and Setting Up Pawns \n");
 
-	SpawnPawns(opt_id,map_id,smap_id,posMsg_id,instrMsg_id,sync_id,leftPawnMoves_id,newPawnPos_id,n_pawns,letter_s,pawns,w,h);
+	SpawnPawns(pawnScoredMsg_id,opt_id,map_id,smap_id,posMsg_id,instrMsg_id,sync_id,leftPawnMoves_id,newPawnPos_id,n_pawns,letter_s,pawns,w,h);
 	GameStart(n_pawns,n_players,pawn_sync,posMsg_id,mynumber,w,h,smap_id,table,letter,pawnPos);
 
 	printf("End Placing Pawns %c - PID : %d \n",letter,getpid());
@@ -122,8 +123,11 @@ int main(int argc,char* argv[])
 	semWaitZero(sync_id,ROUNDSTART,0);
 	semReserve(sync_id,ALLSTARTED,0);
 
+	waitScores(pawnScoredMsg_id,n_flags.q,scoreMsg_id,type);
+
 	readLeftMoves(leftPawnMoves_id,pawnMoves,n_pawns);
 	readNewPos(newPawnPos_id,pawnPos,n_pawns);
+
 
 	while(wait(NULL)!=-1);
 	free(pawnPos);
@@ -133,7 +137,7 @@ int main(int argc,char* argv[])
 	exit(0);
 }
 
-void SpawnPawns(int opt_id,int map_id,int smap_id,int posMsg_id,int instrMsg_id,int sync_id,int leftPawnMoves_id,int newPawnPos_id,int n_pawns,char letter[],int* pawns,int w,int h)
+void SpawnPawns(int pawnScoredMsg_id,int opt_id,int map_id,int smap_id,int posMsg_id,int instrMsg_id,int sync_id,int leftPawnMoves_id,int newPawnPos_id,int n_pawns,char letter[],int* pawns,int w,int h)
 {
 	char opt_id_s[10];
 	char map_id_s[10];
@@ -144,7 +148,8 @@ void SpawnPawns(int opt_id,int map_id,int smap_id,int posMsg_id,int instrMsg_id,
 	char pos_s[10];
 	char leftPawnMoves_id_s[10];
 	char newPawnPos_id_s[10];
-	char* argv[12];
+	char pawnScoredMsg_id_s[10];
+	char* argv[13];
 	int i=0;
 	pawns=malloc(sizeof(int)*(n_pawns));
 
@@ -157,7 +162,7 @@ void SpawnPawns(int opt_id,int map_id,int smap_id,int posMsg_id,int instrMsg_id,
 	sprintf(sync_id_s,"%d",sync_id);
 	sprintf(leftPawnMoves_id_s,"%d",leftPawnMoves_id);
 	sprintf(newPawnPos_id_s,"%d",newPawnPos_id);
-
+	sprintf(pawnScoredMsg_id_s,"%d",pawnScoredMsg_id);
 	/*Prepare Argv*/
 	argv[0] = "./pawn";
 	argv[1] = opt_id_s;
@@ -169,7 +174,8 @@ void SpawnPawns(int opt_id,int map_id,int smap_id,int posMsg_id,int instrMsg_id,
 	argv[8] = sync_id_s;
 	argv[9] = leftPawnMoves_id_s;
 	argv[10] = newPawnPos_id_s;
-	argv[11] = NULL;
+	argv[11] = pawnScoredMsg_id_s;
+	argv[12] = NULL;
 	for(i=0;i<n_pawns;i++)
 	{
 		sprintf(pos_s,"%d",(i+1));
@@ -345,7 +351,7 @@ void Algorithm(int w,int h,int pos,int pawnPos,int moves,int flagPos[],int n_fla
 	found =0;
 	for(i=0;i<n_flags && found!=1;i++)
 	{
-		if((Path[i].flagDistance <= assoc[Path[i].flagIndex].distance || assoc[Path[i].flagIndex].pawnPos==-1) && Path[i].flagIndex!=-1)
+		if((Path[i].flagDistance < assoc[Path[i].flagIndex].distance || assoc[Path[i].flagIndex].pawnPos==-1 || assoc[Path[i].flagIndex].pawnPos==pawnPos) && Path[i].flagIndex!=-1)
 		{
 			assoc[Path[i].flagIndex].distance=Path[i].flagDistance;
 			assoc[Path[i].flagIndex].pawnPos=pawnPos;
@@ -534,6 +540,24 @@ void InitPawnMoves(int pawnMoves[],options* settings)
 	}
 }
 
+
+void waitScores(int pawnScoredMsg_id,int n_flags,int scoreMsg_id,int type)
+{
+	int i=0;
+	numMsg scoreFromPawn;
+	numMsg scoreToMaster;
+	for(i=0;i<n_flags;i++)
+	{
+		read_numMsg(pawnScoredMsg_id,&scoreFromPawn,0);
+		if(scoreFromPawn.q>0)
+		{
+			scoreToMaster.q=scoreFromPawn.q;
+			scoreToMaster.type=type;
+			send_numMsg(scoreMsg_id,&scoreToMaster);
+		}
+	}	
+}
+
 void readLeftMoves(int leftPawnMoves_id,int pawnMoves[],int n_pawns)
 {
 	int i=0;
@@ -555,6 +579,8 @@ void readNewPos(int newPawnPos_id,int pawnPos[],int n_pawns)
 		pawnPos[(newPawnPos.type-1)]=newPawnPos.q;
 	}
 }
+
+
 
 void ClosingRoutine(int instrMsg_id,int posMsg_id,int leftPawnMoves_id,int newPawnPos_id,int pawnScoredMsg_id)
 {

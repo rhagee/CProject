@@ -49,14 +49,16 @@
 																	/* Methods Declaration */
 void Read_Settings(int*,int*,int*,int*,int*,int*,int*,int*,int*,long*);
 void Init_Table(int,int,cell*);
+void Init_Scores(int*,int);
 void Print_Table(int,int,cell*);
 void Print_Status(int,int,cell*,int);
 void createPlayers(int,int,int,int,int*,int*,int,int,int,int,int);
-void Round_Start(int,int,int,int,cell*,int,int,int,int);
+void Round_Start(int,int,int,int,cell*,int,int,int,int,int*);
 void SendNFlags(int,int,int);
 int Flag_Calc(int,int);
 void Flag_ValAndPlace(int,int,cell*,int,int);
 void FlagPlace(cell*,int,int,int);
+void SignScores(int scoreMsg_id,int* scores,int n_flags);
 void ClosingRoutine(cell* table,options* settings,int map_id,int opt_id,int smap_id,int sync_id,int pawn_sync,int* players,int numMsg_id,int);
 
 
@@ -64,7 +66,7 @@ int main()
 {
 																	/*Variables Declaration*/
 	/*Larghezza,Altezza,NumeroGiocatori*/
-	int w,h,n_players,f_min,f_max,f_tot,n_pawns,score,timeleft;
+	int w,h,n_players,f_min,f_max,f_tot,n_pawns,score,timeleft,f_num;
 	/*IDGrigliaGioco,IDOpzioni,IDSemaforiGriglia,IDSemSync*/		
 	int map_id,opt_id,smap_id,sync_id,pawn_sync,numMsg_id,scoreMsg_id;
 	/*Vettore di PID giocatore*/
@@ -101,6 +103,7 @@ int main()
 	scoreMsg_id=instanceMsg();
 																	/*Initialize Table*/
 	Init_Table(w,h,table);
+	Init_Scores(scores,n_players);
 
 																	/*Create Players*/
 	createPlayers(opt_id,map_id,n_players,n_pawns,players,scores,smap_id,sync_id,pawn_sync,numMsg_id,scoreMsg_id);
@@ -109,7 +112,7 @@ int main()
 	semWaitZero(sync_id,MASTERSYNC,0);
 	printf("Starting Settings up Round...\n");
 	/* Round Routine */
-	Round_Start(f_min,f_max,f_tot,score,table,smap_id,numMsg_id,(w*h),n_players);	
+	Round_Start(f_min,f_max,f_tot,score,table,smap_id,numMsg_id,(w*h),n_players,&f_num);	
 
 	semWaitZero(sync_id,ROUNDSYNC,0); /*Wait Players giving info to Pawns*/
 	semSet(sync_id,ROUNDSYNC,n_players); /*Reset Semaphore for next round*/
@@ -130,8 +133,9 @@ int main()
 	semRelease(sync_id,ROUNDSTART,0);
 	printf("MASTER RESET SEMAPHORES \n");
 	
-
 	
+
+	SignScores(scoreMsg_id,scores,f_num);
 
 	/*Round should be running there, master waiting info about Scores.
 	  Probably best way to do it is passing a message queue downside and give it 1 for player, and wait on 0, detect type
@@ -268,12 +272,12 @@ void Init_Table(int w,int h,cell* table)
 	Print_Table(w,h,table);
 }
 
-void Round_Start(int f_min,int f_max,int f_tot,int score,cell* table,int smap_id,int numMsg_id,int size,int n_players)
+void Round_Start(int f_min,int f_max,int f_tot,int score,cell* table,int smap_id,int numMsg_id,int size,int n_players,int* pf_num)
 {
 
-	int f_num = Flag_Calc(f_min,f_max);
-	Flag_ValAndPlace(f_num,score,table,smap_id,size);
-	SendNFlags(f_num,numMsg_id,n_players);
+	*pf_num = Flag_Calc(f_min,f_max);
+	Flag_ValAndPlace(*pf_num,score,table,smap_id,size);
+	SendNFlags(*pf_num,numMsg_id,n_players);
 
 }
 void SendNFlags(int f_num,int numMsg_id,int n_players)
@@ -324,6 +328,27 @@ void FlagPlace(cell* table,int smap_id,int size,int value)
 	else
 	{
 		FlagPlace(table,smap_id,size,value);
+	}
+}
+
+void Init_Scores(int* scores,int n_players)
+{
+	int i=0;
+	for(i=0;i<n_players;i++)
+	{
+		scores[i]=0;
+	}
+}
+void SignScores(int scoreMsg_id,int*scores,int n_flags)
+{
+	numMsg scoreFromPlayer;
+	int i=0;
+
+	for(i=0;i<n_flags;i++)
+	{
+		read_numMsg(scoreMsg_id,&scoreFromPlayer,0);
+		scores[(scoreFromPlayer.type-1)]+=scoreFromPlayer.q;
+		printf("MASTER SIGN SCORE FOR %d VLAUE : %d\n",scoreFromPlayer.type-1,scoreFromPlayer.q);
 	}
 }
 

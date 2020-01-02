@@ -25,9 +25,9 @@
 #define false 0
 
 void DelUselessMoves(int dir[]);
-int Move(int smap_id,int* px,int* py,int w,int dir[],int* pindex,int index,int* pfailed,cell* table,char letter,int nextCardinal);
+int Move(int smap_id,int* px,int* py,int w,int dir[],int* pindex,int index,int* pfailed,numMsg* pScore,cell* table,char letter,int nextCardinal);
 int getPos(int,int,int);
-int findOtherPath(int dir[],cell* table,int,int,int*,int*,int,char,struct timespec delay,int type);
+int findOtherPath(int dir[],cell* table,int,int,int*,int*,int,char,struct timespec delay,int type,int moves);
 
 int main(int argc,char* argv[])
 {
@@ -36,7 +36,7 @@ int main(int argc,char* argv[])
 	char letter;
 	int term;
 	int moves;
-	int posMsg_id,instrMsg_id,leftMoves_id,newPos_id,opt_id,map_id,smap_id,sync_id,index,x,y,w,h;
+	int scoreToPlayerMsg_id,posMsg_id,instrMsg_id,leftMoves_id,newPos_id,opt_id,map_id,smap_id,sync_id,index,x,y,w,h;
 	int dir[4];
 	int failed;
 	long type;
@@ -44,6 +44,7 @@ int main(int argc,char* argv[])
 	instrMsg instr_message;
 	numMsg leftMoves;
 	numMsg newPos;
+	numMsg scored;
 	cell* table;
 	options* settings;
 
@@ -57,6 +58,7 @@ int main(int argc,char* argv[])
 	sync_id=intconvert(8);
 	leftMoves_id=intconvert(9);
 	newPos_id = intconvert(10);
+	scoreToPlayerMsg_id = intconvert(11);
 	settings=getOptions(opt_id);
 	failed=0;
 	term=0;
@@ -118,7 +120,7 @@ int main(int argc,char* argv[])
 				else
 				{
 					printf("FIND OTHER PATH\n");
-					if((findOtherPath(dir,table,w,h,&x,&y,smap_id,letter,delay,type)) == false)
+					if((findOtherPath(dir,table,w,h,&x,&y,smap_id,letter,delay,type,moves)) == false)
 					{
 						term=STOPMOVE;
 					}
@@ -141,19 +143,24 @@ int main(int argc,char* argv[])
 			}
 			else
 			{
-					if(Move(smap_id,&x,&y,w,dir,&index,index,&failed,table,letter,((index+1)%4))==true)
+					if(Move(smap_id,&x,&y,w,dir,&index,index,&failed,&scored,table,letter,((index+1)%4))==true)
 					{
-						nanosleep(&delay,NULL);
 						moves--;
 					}
+					nanosleep(&delay,NULL);
 			}
 		}
-		if(dir[N]+dir[S]+dir[W]+dir[E]>0 && failed!=2)
+		if(dir[N]+dir[S]+dir[W]+dir[E]>0 && term!=2)
 		{
+			scored.q = 0;
+			scored.type=type;
+			send_numMsg(scoreToPlayerMsg_id,&scored);
 			printf("MISS for Pawn : %c-%d -> MY LAST INDEXES N:%d S:%d W:%d E: %d and Moves Left : %d\n",letter,type,dir[N],dir[S],dir[W],dir[E],moves);
 		}
 		else if(instr_message.left>=0)
 		{
+			scored.type=type;
+			send_numMsg(scoreToPlayerMsg_id,&scored);
 			printf("HIT for Pawn : %c-%d -> MY LAST INDEXES N:%d S:%d W:%d E: %d and Moves Left : %d\n",letter,type,dir[N],dir[S],dir[W],dir[E],moves);
 		}
 	}
@@ -167,7 +174,7 @@ int main(int argc,char* argv[])
 	exit(0);
 }
 
-int Move(int smap_id,int* px,int* py,int w,int dir[],int* pindex,int index,int* pfailed,cell* table,char letter,int nextCardinal)
+int Move(int smap_id,int* px,int* py,int w,int dir[],int* pindex,int index,int* pfailed,numMsg* pScore,cell* table,char letter,int nextCardinal)
 {
 	int statement;
 	int x,y,actualpos,nextpos;
@@ -216,9 +223,9 @@ int Move(int smap_id,int* px,int* py,int w,int dir[],int* pindex,int index,int* 
 	}
 	else
 	{
-		if(table[nextpos].type='f')
+		if(table[nextpos].type='f' && pScore!=NULL)
 		{
-
+			pScore->q = table[nextpos].val;
 		}
 		table[actualpos].val=0;
 		table[actualpos].type='z';
@@ -241,7 +248,7 @@ int getPos(int x,int y,int w)
 	return ((y*w)+x);
 }
 
-int findOtherPath(int dir[],cell* table,int w,int h,int* px,int* py,int smap_id,char letter,struct timespec delay,int type)
+int findOtherPath(int dir[],cell* table,int w,int h,int* px,int* py,int smap_id,char letter,struct timespec delay,int type,int moves)
 {
 	int i,j,x,y;
 	int thismoves,next;
@@ -447,13 +454,13 @@ int findOtherPath(int dir[],cell* table,int w,int h,int* px,int* py,int smap_id,
 				myfails=0;
 				while(dir[thismoves]>0 && myfails<4)
 				{
-					if(Move(smap_id,px,py,w,dir,NULL,thismoves,&myfails,table,letter,0)==true)
+					if(Move(smap_id,px,py,w,dir,NULL,thismoves,&myfails,NULL,table,letter,0)==true)
 						nanosleep(&delay,NULL);
 					else
 						printf("Failed Moving in NEW Dir \n");
 				}
 
-				while(Move(smap_id,px,py,w,dir,NULL,next,&myfails,table,letter,0)!=true && myfails<4);
+				while(Move(smap_id,px,py,w,dir,NULL,next,&myfails,NULL,table,letter,0)!=true && myfails<4);
 						nanosleep(&delay,NULL);
 				if(myfails>=4)			
 						printf("Failed Moving in OLD Dir \n");
