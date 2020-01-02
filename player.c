@@ -106,6 +106,7 @@ int main(int argc,char* argv[])
 	printf("Syncronizing and Setting Up Pawns \n");
 
 	SpawnPawns(pawnScoredMsg_id,opt_id,map_id,smap_id,posMsg_id,instrMsg_id,sync_id,leftPawnMoves_id,newPawnPos_id,n_pawns,letter_s,pawns,w,h);
+	
 	GameStart(n_pawns,n_players,pawn_sync,posMsg_id,mynumber,w,h,smap_id,table,letter,pawnPos);
 
 	printf("End Placing Pawns %c - PID : %d \n",letter,getpid());
@@ -114,9 +115,10 @@ int main(int argc,char* argv[])
 
 	InitPawnMoves(pawnMoves,settings);
 
+	/*ROUND CYCLE*/
+	/*while(1)
+	{*/
 	read_numMsg(numMsg_id,&n_flags,type);
-	
-
 	flagPos=malloc(sizeof(int)*n_flags.q);
 	SendDirective(w,h,pawnPos,pawnMoves,instrMsg_id,table,n_pawns,flagPos,n_flags.q,letter);
 	semReserve(sync_id,ROUNDSYNC,0);
@@ -128,6 +130,11 @@ int main(int argc,char* argv[])
 	readLeftMoves(leftPawnMoves_id,pawnMoves,n_pawns);
 	readNewPos(newPawnPos_id,pawnPos,n_pawns);
 
+	semWaitZero(sync_id,ROUNDEND,0);
+	free(flagPos);
+	semReserve(sync_id,ALLREADEND,0);
+
+	/*}*/
 
 	while(wait(NULL)!=-1);
 	free(pawnPos);

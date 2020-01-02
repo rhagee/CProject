@@ -16,6 +16,8 @@
 #define ROUNDSYNC 2
 #define ROUNDSTART 3
 #define ALLSTARTED 4
+#define ROUNDEND 5
+#define ALLREADEND 6
 
 #define N 0
 #define E 1

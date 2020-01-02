@@ -52,31 +52,45 @@ void Init_Table(int,int,cell*);
 void Init_Scores(int*,int);
 void Print_Table(int,int,cell*);
 void Print_Status(int,int,cell*,int);
-void createPlayers(int,int,int,int,int*,int*,int,int,int,int,int);
+void createPlayers(int,int,int*,int*,int,int,int,int,int);
 void Round_Start(int,int,int,int,cell*,int,int,int,int,int*);
 void SendNFlags(int,int,int);
 int Flag_Calc(int,int);
 void Flag_ValAndPlace(int,int,cell*,int,int);
 void FlagPlace(cell*,int,int,int);
 void SignScores(int scoreMsg_id,int* scores,int n_flags);
-void ClosingRoutine(cell* table,options* settings,int map_id,int opt_id,int smap_id,int sync_id,int pawn_sync,int* players,int numMsg_id,int);
+
+/*END GAME AND STOP HANDLE/DELETERS*/
+void ClosingRoutine();
+void termination_handler(int sig);
+void endgame_handler(int sig);
+
+
+cell* table;
+options* settings;
+int w,h;
+int map_id,opt_id,smap_id,sync_id,pawn_sync,numMsg_id,scoreMsg_id;
+int* players;
+int* scores;
 
 
 int main()
 {
 																	/*Variables Declaration*/
 	/*Larghezza,Altezza,NumeroGiocatori*/
-	int w,h,n_players,f_min,f_max,f_tot,n_pawns,score,timeleft,f_num;
+	int n_players,f_min,f_max,f_tot,n_pawns,score,timeleft,f_num;
 	/*IDGrigliaGioco,IDOpzioni,IDSemaforiGriglia,IDSemSync*/		
-	int map_id,opt_id,smap_id,sync_id,pawn_sync,numMsg_id,scoreMsg_id;
+	/*int map_id,opt_id,smap_id,sync_id,pawn_sync,numMsg_id,scoreMsg_id;*/
 	/*Vettore di PID giocatore*/
-	int* players;
-	int* scores;
+	/*int* players;
+	int* scores;*/
 	/*Puntatori alle Aree di memoria*/
-	cell *table;
-	options* settings;
-	
-																	/*Take Settings*/
+	/*cell* table;
+	options* settings;*/
+
+
+	signal(SIGINT,termination_handler);
+	signal(SIGALRM,endgame_handler);														/*Take Settings*/
 	opt_id=instanceOptions();
 	settings = getOptions(opt_id);
 	Read_Settings(&(settings->SO_NUM_G),&(settings->SO_NUM_P),&(settings->SO_MAX_TIME),&(settings->SO_BASE),&(settings->SO_ALTEZZA),&(settings->SO_FLAG_MIN),&(settings->SO_FLAG_MAX),&(settings->SO_ROUND_SCORE),&(settings->SO_N_MOVES),&(settings->SO_MIN_HOLD_NSEC));														/*Creating Map*/
@@ -97,7 +111,7 @@ int main()
 	map_id=instanceMap(w,h);
 	table = getMap(map_id);
 	smap_id=instanceSem(w*h);
-	sync_id=instanceSem(5);
+	sync_id=instanceSem(7);
 	pawn_sync=instanceSem(n_players);
 	numMsg_id=instanceMsg();
 	scoreMsg_id=instanceMsg();
@@ -106,14 +120,13 @@ int main()
 	Init_Scores(scores,n_players);
 
 																	/*Create Players*/
-	createPlayers(opt_id,map_id,n_players,n_pawns,players,scores,smap_id,sync_id,pawn_sync,numMsg_id,scoreMsg_id);
-	Print_Status(w,h,table,smap_id);
+	createPlayers(n_players,n_pawns,players,scores,smap_id,sync_id,pawn_sync,numMsg_id,scoreMsg_id);
 	printf("WAITING PLAYERS SYNC...\n",sync_id);
 	semWaitZero(sync_id,MASTERSYNC,0);
-	printf("Starting Settings up Round...\n");
 	/* Round Routine */
+	/*while(1){*/
+	printf("Starting Settings up Round...\n");
 	Round_Start(f_min,f_max,f_tot,score,table,smap_id,numMsg_id,(w*h),n_players,&f_num);	
-
 	semWaitZero(sync_id,ROUNDSYNC,0); /*Wait Players giving info to Pawns*/
 	semSet(sync_id,ROUNDSYNC,n_players); /*Reset Semaphore for next round*/
 	printf("UNLOCKING ROUND START\n");
@@ -123,7 +136,7 @@ int main()
 	semWaitZero(sync_id,ALLSTARTED,0);
 
 
-	/*alarm(timeleft);*/
+	alarm(timeleft);
 
 	/*Dovrò spostarlo in un HANDLER di fine round, questi semafori verranno SBLOCCATI prima di sbloccare l'END Round ai player
 	Ovviamente ENDRound avrà un controllo su "tutti hanno letto", a quel punto verrà resettato insieme al TUTTI hanno letto
@@ -131,12 +144,23 @@ int main()
 	
 	semSet(sync_id,ALLSTARTED,((n_players*n_pawns)+n_players));
 	semRelease(sync_id,ROUNDSTART,0);
-	printf("MASTER RESET SEMAPHORES \n");
-	
-	
 
 	SignScores(scoreMsg_id,scores,f_num);
+	/*if all flags are catched -> RESET alarm*/
+	alarm(0);
 
+	semReserve(sync_id,ROUNDEND,0);
+	semWaitZero(sync_id,ALLREADEND,0);
+
+	semSet(sync_id,ALLREADEND,((n_players*n_pawns)+n_players));
+	semRelease(sync_id,ROUNDEND,0);
+
+	printf("MASTER RESET SEMAPHORES \n");
+	
+	/*}*/
+	
+
+	
 	/*Round should be running there, master waiting info about Scores.
 	  Probably best way to do it is passing a message queue downside and give it 1 for player, and wait on 0, detect type
 	  and give score to the player, then test if all flags are taken, if they are the round should stop and restart, 
@@ -151,7 +175,7 @@ int main()
 
 
 
-void createPlayers(int opt_id,int map_id,int n_players,int n_pawns,int* players,int* scores,int smap_id,int sync_id,int pawn_sync,int numMsg_id,int scoreMsg_id)
+void createPlayers(int n_players,int n_pawns,int* players,int* scores,int smap_id,int sync_id,int pawn_sync,int numMsg_id,int scoreMsg_id)
 {
 	char opt_id_s[10];
 	char map_id_s[10];
@@ -186,6 +210,8 @@ void createPlayers(int opt_id,int map_id,int n_players,int n_pawns,int* players,
 	semSet(sync_id,ROUNDSYNC,n_players);
 	semSet(sync_id,ROUNDSTART,1);
 	semSet(sync_id,ALLSTARTED,((n_players*n_pawns)+n_players));
+	semSet(sync_id,ROUNDEND,1);
+	semSet(sync_id,ALLREADEND,((n_players*n_pawns)+n_players));
 	semSetAll(pawn_sync,0);
 	semSet(pawn_sync,0,1);
 	semSetAll(smap_id,1);
@@ -242,6 +268,8 @@ void Read_Settings(int* SO_NUM_G,int* SO_NUM_P,int* SO_MAX_TIME,int* SO_BASE,int
 	file = fopen("settings.txt","r");
 	printf(MENU);
 	scanf("%d",&gamemode);
+	printf("						_____________________________________________________\n");
+	printf("								     GAME START                    \n\n");
 	if(gamemode==2)
 	{
 		fscanf(file,HARD_MODE,SO_NUM_G,SO_NUM_P,SO_MAX_TIME,SO_BASE,SO_ALTEZZA,SO_FLAG_MIN,SO_FLAG_MAX,SO_ROUND_SCORE,SO_N_MOVES,SO_MIN_HOLD_NSEC);
@@ -269,7 +297,6 @@ void Init_Table(int w,int h,cell* table)
 		table[i].type = 'z';
 		i++;
 	}
-	Print_Table(w,h,table);
 }
 
 void Round_Start(int f_min,int f_max,int f_tot,int score,cell* table,int smap_id,int numMsg_id,int size,int n_players,int* pf_num)
@@ -354,9 +381,10 @@ void SignScores(int scoreMsg_id,int*scores,int n_flags)
 
 
 
-void ClosingRoutine(cell* table,options* settings,int map_id,int opt_id,int smap_id,int sync_id,int pawn_sync,int* players,int numMsg_id,int scoreMsg_id)
+void ClosingRoutine()
 {
 	free(players);
+	free(scores);
 	shmdt(table);
 	shmdt(settings);
 	deleteMap(map_id);
@@ -482,4 +510,21 @@ void Print_Status(int w,int h,cell* table,int smap_id)
 		j++;
 	}
 	printf("\n");
+}
+
+
+
+void termination_handler(int sig)
+{
+
+	ClosingRoutine();
+	printf("TERMINATED for sig %d\n",sig);
+	exit(0);
+}
+
+void endgame_handler(int sig)
+{
+	ClosingRoutine();
+	printf("\n GAME OVER \n");
+	Print_Table(w,h,table);
 }

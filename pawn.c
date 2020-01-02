@@ -75,6 +75,10 @@ int main(int argc,char* argv[])
 	h=settings->SO_ALTEZZA;
 	moves=settings->SO_N_MOVES;
 	/* Init of directions */
+
+	/*  ROUND ROUTINE */
+
+	/*while(1){ */
 	dir[N]=0;
 	dir[S]=0;
 	dir[W]=0;
@@ -171,6 +175,14 @@ int main(int argc,char* argv[])
 	newPos.type=type;
 	newPos.q=getPos(x,y,w);
 	send_numMsg(newPos_id,&newPos);
+
+	semWaitZero(sync_id,ROUNDEND,0);
+	semReserve(sync_id,ALLREADEND,0);
+
+	/*
+	}
+	*/
+
 	exit(0);
 }
 
