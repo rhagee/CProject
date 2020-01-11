@@ -28,6 +28,7 @@ void DelUselessMoves(int dir[]);
 int Move(int smap_id,int* px,int* py,int w,int dir[],int* pindex,int index,int* pfailed,numMsg* pScore,cell* table,char letter,int nextCardinal);
 int getPos(int,int,int);
 int findOtherPath(int dir[],cell* table,int,int,int*,int*,int,char,struct timespec delay,int type,int moves);
+void termination_handler(int sig);
 
 int main(int argc,char* argv[])
 {
@@ -48,6 +49,7 @@ int main(int argc,char* argv[])
 	cell* table;
 	options* settings;
 
+	signal(SIGINT,termination_handler);
 	opt_id=intconvert(1);
 	map_id=intconvert(2);
 	smap_id=intconvert(3);
@@ -78,7 +80,7 @@ int main(int argc,char* argv[])
 
 	/*  ROUND ROUTINE */
 
-	/*while(1){ */
+	while(1){ 
 	dir[N]=0;
 	dir[S]=0;
 	dir[W]=0;
@@ -86,9 +88,11 @@ int main(int argc,char* argv[])
 	/*WAIT round start and signal that i heard Round start*/
 	semWaitZero(sync_id,ROUNDSTART,0);
 	semReserve(sync_id,ALLSTARTED,0);
-
+	instr_message.left=1;
 	while(instr_message.left>0)
 	{
+		term=0;
+		failed=0;
 		read_instrMsg(instrMsg_id,&instr_message,type);
 		/*if(instr_message.left!=-1)
 			printf("pawn : %c - %d MOVE: N: %d S: %d W: %d E: %d -> left instr %d\n",letter,instr_message.type,instr_message.dir[N],instr_message.dir[S],instr_message.dir[W],instr_message.dir[E],instr_message.left);*/
@@ -154,18 +158,29 @@ int main(int argc,char* argv[])
 					nanosleep(&delay,NULL);
 			}
 		}
-		if(dir[N]+dir[S]+dir[W]+dir[E]>0 && term!=2)
+		if(instr_message.left>=0 && table[getPos((x+dir[E]-dir[W]),(y+dir[S]-dir[N]),w)].type!='f' && dir[N]+dir[S]+dir[W]+dir[E]>0)
 		{
 			scored.q = 0;
 			scored.type=type;
 			send_numMsg(scoreToPlayerMsg_id,&scored);
 			printf("MISS for Pawn : %c-%d -> MY LAST INDEXES N:%d S:%d W:%d E: %d and Moves Left : %d\n",letter,type,dir[N],dir[S],dir[W],dir[E],moves);
 		}
-		else if(instr_message.left>=0)
+		else if(instr_message.left<0)
+		{
+			printf("I'm NOT moving\n");
+		}
+		else if(instr_message.left>=0 && dir[N]+dir[S]+dir[W]+dir[E]==0)
 		{
 			scored.type=type;
 			send_numMsg(scoreToPlayerMsg_id,&scored);
 			printf("HIT for Pawn : %c-%d -> MY LAST INDEXES N:%d S:%d W:%d E: %d and Moves Left : %d\n",letter,type,dir[N],dir[S],dir[W],dir[E],moves);
+		}
+		else if(term==2)
+		{
+			scored.q = 0;
+			scored.type=type;
+			send_numMsg(scoreToPlayerMsg_id,&scored);
+			printf("FAILED MOVING \n");
 		}
 	}
 	/*Send Message With Number of Left Moves*/
@@ -175,13 +190,10 @@ int main(int argc,char* argv[])
 	newPos.type=type;
 	newPos.q=getPos(x,y,w);
 	send_numMsg(newPos_id,&newPos);
-
 	semWaitZero(sync_id,ROUNDEND,0);
 	semReserve(sync_id,ALLREADEND,0);
-
-	/*
 	}
-	*/
+	
 
 	exit(0);
 }
@@ -227,7 +239,7 @@ int Move(int smap_id,int* px,int* py,int w,int dir[],int* pindex,int index,int* 
 	nextpos=getPos(x+incX,y+incY,w);
 	if(semReserve(smap_id,nextpos,IPC_NOWAIT)==-1)
 	{
-		printf("\n ERROR x:%d y:%d\n",x+1,y);
+		/*printf("\n ERROR x:%d y:%d\n",x+1,y);*/
 		if(pindex!=NULL)
 			*pindex=nextCardinal;
 		*pfailed=*pfailed+1;
@@ -271,7 +283,6 @@ int findOtherPath(int dir[],cell* table,int w,int h,int* px,int* py,int smap_id,
 	int minusMoves,plusMoves;
 	x=*px;
 	y=*py;
-	printf("Trying other path \n");
 	foundminus=false;
 	foundplus=false;
 	ok=false;
@@ -462,7 +473,7 @@ int findOtherPath(int dir[],cell* table,int w,int h,int* px,int* py,int smap_id,
 		}
 		if(ok==true)
 		{
-			printf("I Tried other path %c-%d : dir %d and next %d \n",letter,type,thismoves,next);
+			/*printf("I Tried other path %c-%d : dir %d and next %d \n",letter,type,thismoves,next);*/
 				myfails=0;
 				while(dir[thismoves]>0 && myfails<4)
 				{
@@ -478,7 +489,7 @@ int findOtherPath(int dir[],cell* table,int w,int h,int* px,int* py,int smap_id,
 						printf("Failed Moving in OLD Dir \n");
 			if(myfails<4 && ok==true)
 			{
-				printf("GOOD FAILS = %d\n",myfails);
+				/*printf("GOOD FAILS = %d\n",myfails);*/
 				return true;
 			}
 			else
@@ -521,4 +532,9 @@ void DelUselessMoves(int dir[])
 				dir[W]=0;
 			}
 		}
+}
+
+void termination_handler(int sig)
+{
+	exit(0);
 }

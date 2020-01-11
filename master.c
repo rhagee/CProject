@@ -69,16 +69,17 @@ void endgame_handler(int sig);
 cell* table;
 options* settings;
 int w,h;
-int map_id,opt_id,smap_id,sync_id,pawn_sync,numMsg_id,scoreMsg_id;
+int map_id,opt_id,smap_id,sync_id,pawn_sync,numMsg_id,scoreMsg_id,n_players;
 int* players;
 int* scores;
+int totrounds;
 
 
 int main()
 {
 																	/*Variables Declaration*/
 	/*Larghezza,Altezza,NumeroGiocatori*/
-	int n_players,f_min,f_max,f_tot,n_pawns,score,timeleft,f_num;
+	int f_min,f_max,f_tot,n_pawns,score,timeleft,f_num;
 	/*IDGrigliaGioco,IDOpzioni,IDSemaforiGriglia,IDSemSync*/		
 	/*int map_id,opt_id,smap_id,sync_id,pawn_sync,numMsg_id,scoreMsg_id;*/
 	/*Vettore di PID giocatore*/
@@ -90,7 +91,9 @@ int main()
 
 
 	signal(SIGINT,termination_handler);
-	signal(SIGALRM,endgame_handler);														/*Take Settings*/
+	signal(SIGALRM,endgame_handler);
+	totrounds=0;
+															/*Take Settings*/
 	opt_id=instanceOptions();
 	settings = getOptions(opt_id);
 	Read_Settings(&(settings->SO_NUM_G),&(settings->SO_NUM_P),&(settings->SO_MAX_TIME),&(settings->SO_BASE),&(settings->SO_ALTEZZA),&(settings->SO_FLAG_MIN),&(settings->SO_FLAG_MAX),&(settings->SO_ROUND_SCORE),&(settings->SO_N_MOVES),&(settings->SO_MIN_HOLD_NSEC));														/*Creating Map*/
@@ -124,7 +127,7 @@ int main()
 	printf("WAITING PLAYERS SYNC...\n",sync_id);
 	semWaitZero(sync_id,MASTERSYNC,0);
 	/* Round Routine */
-	/*while(1){*/
+	while(1){
 	printf("Starting Settings up Round...\n");
 	Round_Start(f_min,f_max,f_tot,score,table,smap_id,numMsg_id,(w*h),n_players,&f_num);	
 	semWaitZero(sync_id,ROUNDSYNC,0); /*Wait Players giving info to Pawns*/
@@ -134,8 +137,7 @@ int main()
 	Print_Status(w,h,table,smap_id);
 	semReserve(sync_id,ROUNDSTART,0);
 	semWaitZero(sync_id,ALLSTARTED,0);
-
-
+	
 	alarm(timeleft);
 
 	/*Dovrò spostarlo in un HANDLER di fine round, questi semafori verranno SBLOCCATI prima di sbloccare l'END Round ai player
@@ -148,7 +150,7 @@ int main()
 	SignScores(scoreMsg_id,scores,f_num);
 	/*if all flags are catched -> RESET alarm*/
 	alarm(0);
-
+	totrounds++;
 	semReserve(sync_id,ROUNDEND,0);
 	semWaitZero(sync_id,ALLREADEND,0);
 
@@ -156,8 +158,8 @@ int main()
 	semRelease(sync_id,ROUNDEND,0);
 
 	printf("MASTER RESET SEMAPHORES \n");
-	
-	/*}*/
+
+	}
 	
 
 	
@@ -516,7 +518,11 @@ void Print_Status(int w,int h,cell* table,int smap_id)
 
 void termination_handler(int sig)
 {
-
+	int i=0;
+	for(i=0;i<n_players;i++)
+	{
+		kill(players[i],SIGINT);
+	}
 	ClosingRoutine();
 	printf("TERMINATED for sig %d\n",sig);
 	exit(0);
@@ -524,7 +530,17 @@ void termination_handler(int sig)
 
 void endgame_handler(int sig)
 {
-	ClosingRoutine();
-	printf("\n GAME OVER \n");
+	int i=0;
+	printf("GAME OVER -> Alarm 0\n");
+	for(i=0;i<n_players;i++)
+	{
+		kill(players[i],SIGINT);
+	}
+
+	while(wait(NULL)!=-1);
+
+	printf("\n\n\n GAME OVER Rounds : %d \n\n\n",totrounds);
 	Print_Table(w,h,table);
+	ClosingRoutine();
+	exit(0);
 }

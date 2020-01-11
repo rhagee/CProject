@@ -50,18 +50,26 @@ void getPos(int* x,int* y,int pos,int w);
 void InitPawnMoves(int pawnMoves[],options* settings);
 void readLeftMoves(int leftPawnMoves_id,int pawnMoves[],int n_pawns);
 void readNewPos(int newPawnPos_id,int pawnPos[],int n_pawns);
-void ClosingRoutine(int,int,int,int,int);
+
 void waitScores(int pawnScoredMsg_id,int n_flags,int scoreMsg_id,int type);
+void termination_handler(int sig);
+void ClosingRoutine();
+
+
+
+int instrMsg_id,posMsg_id,leftPawnMoves_id,newPawnPos_id,pawnScoredMsg_id;
+int n_pawns;
+int* pawns;
+int num_instr;
 
 int main(int argc,char* argv[])
 {
-	int n_pawns,w,h;
-	int* pawns;
+	int w,h;
 	int* pawnPos;
 	int* pawnMoves;
 	int* flagPos;
 	int i=0,j=0;
-	int opt_id,map_id,smap_id,sync_id,pawn_sync,mynumber,n_players,posMsg_id,instrMsg_id,numMsg_id,leftPawnMoves_id,newPawnPos_id,scoreMsg_id,pawnScoredMsg_id;
+	int opt_id,map_id,smap_id,sync_id,pawn_sync,mynumber,n_players,numMsg_id,scoreMsg_id;
 	long type;
 	char letter;
 	char* letter_s;
@@ -69,6 +77,7 @@ int main(int argc,char* argv[])
 	cell* table;
 	numMsg n_flags;
 	
+	signal(SIGINT,termination_handler);
 	/* Take Passed Arguments */
 	opt_id = intconvert(1);
 	map_id = intconvert(2);
@@ -97,6 +106,7 @@ int main(int argc,char* argv[])
 	n_players=settings->SO_NUM_G;
 	pawnPos=malloc(sizeof(int)*n_pawns);
 	pawnMoves=malloc(sizeof(int)*n_pawns);
+	pawns=malloc(sizeof(int)*(n_pawns));
 	
 	printf("Waiting ALLPLAYERSYNC\n");
 	/*Wait all players Spawned*/
@@ -116,8 +126,8 @@ int main(int argc,char* argv[])
 	InitPawnMoves(pawnMoves,settings);
 
 	/*ROUND CYCLE*/
-	/*while(1)
-	{*/
+	while(1)
+	{
 	read_numMsg(numMsg_id,&n_flags,type);
 	flagPos=malloc(sizeof(int)*n_flags.q);
 	SendDirective(w,h,pawnPos,pawnMoves,instrMsg_id,table,n_pawns,flagPos,n_flags.q,letter);
@@ -134,12 +144,11 @@ int main(int argc,char* argv[])
 	free(flagPos);
 	semReserve(sync_id,ALLREADEND,0);
 
-	/*}*/
+	}
 
 	while(wait(NULL)!=-1);
 	free(pawnPos);
-	free(pawns);
-	ClosingRoutine(instrMsg_id,posMsg_id,newPawnPos_id,leftPawnMoves_id,pawnScoredMsg_id);
+	ClosingRoutine();
 	/*Print_Table(w,h,table);*/
 	exit(0);
 }
@@ -158,7 +167,6 @@ void SpawnPawns(int pawnScoredMsg_id,int opt_id,int map_id,int smap_id,int posMs
 	char pawnScoredMsg_id_s[10];
 	char* argv[13];
 	int i=0;
-	pawns=malloc(sizeof(int)*(n_pawns));
 
 	/*Convert from int to string*/
 	sprintf(opt_id_s, "%d", opt_id);
@@ -196,6 +204,7 @@ void SpawnPawns(int pawnScoredMsg_id,int opt_id,int map_id,int smap_id,int posMs
 				printf("ERRORE\n");
 			break;
 			default:
+			/*printf("%d\n",pawns[i]);*/
 			break;
 		}
 	}
@@ -243,7 +252,7 @@ void SendDirective(int w,int h,int pawnPos[],int pawnMoves[],int instrMsg_id,cel
 	instrMsg message;
 	assoc=malloc(sizeof(Move)*n_flags);
 	PawnFlag=malloc(sizeof(PathObj)*n_flags);
-
+	num_instr=0;
 	for(i=0;i<n_flags;i++)
 	{
 		assoc[i].pawnPos=-1;
@@ -282,6 +291,7 @@ void SendDirective(int w,int h,int pawnPos[],int pawnMoves[],int instrMsg_id,cel
 		if(cont!=0)
 		{
 			PathSender(instrMsg_id,&message,(i+1),i,PawnFlag,cont,pawnPos,flagPos,w);
+			num_instr+=cont;
 		}
 		else
 		{
@@ -318,6 +328,7 @@ void Algorithm(int w,int h,int pos,int pawnPos,int moves,int flagPos[],int n_fla
 	int startX,startY,endX,endY,fX,fY;
 	PathObj* Path;
 	int currdist,pathdist=0;
+	/*printf("moves left %d for pawn %d\n",moves,pawnPos+1);*/
 	getPos(&startX,&startY,pos,w);
 	Path = malloc(sizeof(PathObj)*n_flags);
 	for(i=0;i<n_flags;i++)
@@ -358,7 +369,7 @@ void Algorithm(int w,int h,int pos,int pawnPos,int moves,int flagPos[],int n_fla
 	found =0;
 	for(i=0;i<n_flags && found!=1;i++)
 	{
-		if((Path[i].flagDistance < assoc[Path[i].flagIndex].distance || assoc[Path[i].flagIndex].pawnPos==-1 || assoc[Path[i].flagIndex].pawnPos==pawnPos) && Path[i].flagIndex!=-1)
+		if((Path[i].flagDistance < assoc[Path[i].flagIndex].distance || assoc[Path[i].flagIndex].pawnPos==-1 || assoc[Path[i].flagIndex].pawnPos==pawnPos) && Path[i].flagDistance<=moves && Path[i].flagIndex!=-1)
 		{
 			assoc[Path[i].flagIndex].distance=Path[i].flagDistance;
 			assoc[Path[i].flagIndex].pawnPos=pawnPos;
@@ -553,7 +564,7 @@ void waitScores(int pawnScoredMsg_id,int n_flags,int scoreMsg_id,int type)
 	int i=0;
 	numMsg scoreFromPawn;
 	numMsg scoreToMaster;
-	for(i=0;i<n_flags;i++)
+	for(i=0;i<num_instr;i++)
 	{
 		read_numMsg(pawnScoredMsg_id,&scoreFromPawn,0);
 		if(scoreFromPawn.q>0)
@@ -588,8 +599,21 @@ void readNewPos(int newPawnPos_id,int pawnPos[],int n_pawns)
 }
 
 
+void termination_handler(int sig)
+{
+	int i=0;
+	for(i=0;i<n_pawns;i++)
+	{
+		kill(pawns[i],SIGINT);
+	}
+	while(wait(NULL)!=-1);
+	ClosingRoutine();
+	printf("\n \n PLAYER ENDED FOR ROUND TERM \n \n ");
+	exit(0);
+}
 
-void ClosingRoutine(int instrMsg_id,int posMsg_id,int leftPawnMoves_id,int newPawnPos_id,int pawnScoredMsg_id)
+
+void ClosingRoutine()
 {
 	msgctl(instrMsg_id, IPC_RMID, NULL);
 	msgctl(posMsg_id, IPC_RMID, NULL);
