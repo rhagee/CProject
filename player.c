@@ -1,16 +1,14 @@
-
-
+															/*Includes*/
 #include "lib/sharedmem.h"
-
+															/*Defines*/														
 #define intconvert(X) atoi(argv[X]);
 #define FIRSTPLAYER 0
-
+															/*Struct Defines*/
 struct BestMove
 {
 	int distance;
 	int pawnPos;
 };
-
 typedef struct BestMove Move;
 
 struct PathObject
@@ -18,72 +16,90 @@ struct PathObject
 	int flagIndex;
 	int flagDistance;
 };
-
 typedef struct PathObject PathObj;
 
-void SpawnPawns(int pawnScoredMsg_id,int opt_id,int map_id,int smap_id,int posMsg_id,int instrMsg_id,int sync_id,int leftPawnMoves_id,int newPawnPos_id,int n_pawns,char letter[],int* pawns,int w,int h);
-int rndPos(int w,int h,int smap_id);
-void GameStart(int n_pawns,int n_players,int pawn_sync,int posMsg_id,int mynumber,int w,int h,int smap_id,cell* table,int letter,int* pawnPos);
-void getFlagPos(int size,cell* table,int flagPos[]);
-void Algorithm(int w,int h,int pos,int pawnPos,int moves,int flagPos[],int n_flags,Move assoc[]);
-void insertPath(PathObj* Path,int n_flags,int flagPos[],int pos,int flagIndex,int flagDistance,int w);
-void PathSender(int instrMsg_id,instrMsg* message,long type,int pawn,PathObj pawnFlag[],int length,int pawnPos[],int flagPos[],int w);
-void PathCalculator(int flagPos,int pawnPos,instrMsg* message,int w);
-void SendDirective(int,int,int pawnPos[],int pawnMoves[],int,cell*,int,int flagPos[],int n_flags,int letter);
-void PawnInit(int w,int h,int smap_id,int posMsg_id,cell* table,int letter,long type,int* pawnPos);
-void Print_Table(int w,int h,cell* table);
-void Print_TStatus(int w,int h,cell* table);
-void getPos(int* x,int* y,int pos,int w);
-void InitPawnMoves(int pawnMoves[],options* settings);
-void readLeftMoves(int leftPawnMoves_id,int pawnMoves[],int n_pawns);
-void readNewPos(int newPawnPos_id,int pawnPos[],int n_pawns);
+															/*Functions Definition*/
+
+/*Pawns Creation and Calculation*/
+void SpawnPawns(char letter[],int opt_id,int map_id,int smap_id,int sync_id);
+int rndPos(int smap_id);
+
+/*Game Starting*/
+void GameStart(cell* table,int n_players,int letter,int pawn_sync,int mynumber,int smap_id);
+
+/*Algorithm for BEST Paths, Path Calculation and Path Sending*/
+void Algorithm(int pos,int pawnPos,int moves,int n_flags,Move assoc[]);
+void insertPath(PathObj* Path,int n_flags,int pos,int flagIndex,int flagDistance);
+void PathSender(instrMsg* message,long type,int pawn,PathObj pawnFlag[],int length);
+void PathCalculator(int flagPos,int pawnPos,instrMsg* message);
+void SendDirective(int,cell*,int,int n_flags,int letter);
+
+/*Getters*/
+void getFlagPos(int size,cell* table);
+void getPos(int* x,int* y,int pos);
+
+/**Initializations*/
+void PawnInit(cell* table,int letter,long type,int smap_id);
+void InitPawnMoves(options* settings);
+
+/*Readers*/
+void readLeftMoves();
+void readNewPos();
+
+/*Calculation of TotalMoves and Sends to Master*/
 int calcTotMoves();
 
-void waitScores(int pawnScoredMsg_id,int n_flags,int scoreMsg_id,int type);
+/*Waiting Scores*/
+void waitScores(int n_flags,int scoreMsg_id,int sync_id);
+
+/*Closing Functions*/
 void termination_handler(int sig);
 void ClosingRoutine();
 
 
-
+/*Global Variables that I have to free or use after the SIGNAL*/
 int instrMsg_id,posMsg_id,leftPawnMoves_id,newPawnPos_id,pawnScoredMsg_id,movesMsg_id,semPawn_id;
 int n_pawns;
-int* pawns;
-int num_instr;
-int* pawnMoves;
 long type;
-char letter;
-int opt_id,map_id,smap_id,sync_id,pawn_sync,mynumber,n_players,numMsg_id,scoreMsg_id;
+
+int* pawnPos;
+int* flagPos;
+int* pawnMoves;
+int* pawns;
+
+/*Useful as Global*/
+int w,h;
 
 int main(int argc,char* argv[])
 {
-	int w,h;
-	int* pawnPos;
-
-	int* flagPos;
-	int i=0,j=0;
-	
-
-
+	/*Variables Declarations*/
 	char* letter_s;
 	options* settings;
 	cell* table;
 	numMsg n_flags;
 	numMsg totalMoves;
-	
+	char letter;
+	int opt_id,map_id,smap_id,sync_id,pawn_sync,mynumber,n_players,numMsg_id,scoreMsg_id;
+
+	/*Signal Handlers*/
+	signal(SIGTERM,termination_handler);
 	signal(SIGINT,termination_handler);
+	signal(SIGTSTP,termination_handler);
+	signal(SIGQUIT,termination_handler);
+
 	/* Take Passed Arguments */
 	opt_id = intconvert(1);
 	map_id = intconvert(2);
 	smap_id = intconvert(3)
 	sync_id = intconvert(4);
 	letter = intconvert(5);
-	letter_s=argv[5];
+	letter_s = argv[5];
 	mynumber=intconvert(6);
+	type=mynumber+1;
 	pawn_sync=intconvert(7);
 	numMsg_id=intconvert(8);
 	scoreMsg_id=intconvert(9);
 	movesMsg_id = intconvert(10);
-	type=mynumber+1;
 	posMsg_id=instanceMsg();
 	instrMsg_id=instanceMsg();
 	leftPawnMoves_id=instanceMsg();
@@ -98,58 +114,72 @@ int main(int argc,char* argv[])
 	h=settings->SO_ALTEZZA;
 	n_pawns=settings->SO_NUM_P;
 	n_players=settings->SO_NUM_G;
+
 	pawnPos=malloc(sizeof(int)*n_pawns);
 	pawnMoves=malloc(sizeof(int)*n_pawns);
 	pawns=malloc(sizeof(int)*(n_pawns));
 	
-	printf("Waiting ALLPLAYERSYNC\n");
+	/*printf("Waiting ALLPLAYERSYNC\n");*/
 	/*Wait all players Spawned*/
 	semWaitZero(sync_id,ALLPLAYERSYNC,0);
 
 	/* Create Pawns and Set them up */
 	printf("Syncronizing and Setting Up Pawns \n");
 
-	SpawnPawns(pawnScoredMsg_id,opt_id,map_id,smap_id,posMsg_id,instrMsg_id,sync_id,leftPawnMoves_id,newPawnPos_id,n_pawns,letter_s,pawns,w,h);
+	SpawnPawns(letter_s,opt_id,map_id,smap_id,sync_id);
 	
-	GameStart(n_pawns,n_players,pawn_sync,posMsg_id,mynumber,w,h,smap_id,table,letter,pawnPos);
+	GameStart(table,n_players,letter,pawn_sync,mynumber,smap_id);
 
 	printf("End Placing Pawns %c - PID : %d \n",letter,getpid());
 
 	semReserve(sync_id,MASTERSYNC,0);
 
-	InitPawnMoves(pawnMoves,settings);
+	InitPawnMoves(settings);
 
-	/*ROUND CYCLE*/
+	/*ROUND ROUTINE*/
 	while(1)
 	{
-	read_numMsg(numMsg_id,&n_flags,type);
-	flagPos=malloc(sizeof(int)*n_flags.q);
-	SendDirective(w,h,pawnPos,pawnMoves,instrMsg_id,table,n_pawns,flagPos,n_flags.q,letter);
-	semReserve(sync_id,ROUNDSYNC,0);
-	semWaitZero(sync_id,ROUNDSTART,0);
-	semReserve(sync_id,ALLSTARTED,0);
+		/*Wait master giving the Number of placed flags*/
+		read_numMsg(numMsg_id,&n_flags,type);
+		flagPos=malloc(sizeof(int)*n_flags.q);
 
-	waitScores(pawnScoredMsg_id,n_flags.q,scoreMsg_id,type);
+		/*Start Calculating and Sending Directive to Pawns*/
+		SendDirective(instrMsg_id,table,n_pawns,n_flags.q,letter);
 
-	readLeftMoves(leftPawnMoves_id,pawnMoves,n_pawns);
-	readNewPos(newPawnPos_id,pawnPos,n_pawns);
+		/*Telling master I'v finished sending*/
+		semReserve(sync_id,ROUNDSYNC,0);
 
-	free(flagPos);
-	totalMoves.type=type;
-	totalMoves.q = calcTotMoves();
-	/*Send Remaining Moves*/
-	send_numMsg(movesMsg_id,&totalMoves);
-	semReserve(sync_id,ALLREADEND,0);
+		/*Waiting master Starting Round and notify master about that*/
+		semWaitZero(sync_id,ROUNDSTART,0);
+		semReserve(sync_id,ALLSTARTED,0);
+
+		/*Player start waiting HITS*/
+		waitScores(n_flags.q,scoreMsg_id,sync_id);
+
+		/*Reading left moves and new position (pawns)*/
+		readLeftMoves();
+		readNewPos();
+
+		/*Deallocating FlagPos and reallocating (probability of new size)*/
+		free(flagPos);
+
+		/*Send Remaining Moves*/
+		totalMoves.type=type;
+		totalMoves.q = calcTotMoves();
+		send_numMsg(movesMsg_id,&totalMoves);
+
+		/*Notify master that I'v done my END ROUTINE*/
+		semReserve(sync_id,ALLREADEND,0);
 	}
 
+	/*Code should never go there but just in-case of bugs*/
 	while(wait(NULL)!=-1);
-	free(pawnPos);
 	ClosingRoutine();
-	/*Print_Table(w,h,table);*/
+
 	exit(0);
 }
 
-void SpawnPawns(int pawnScoredMsg_id,int opt_id,int map_id,int smap_id,int posMsg_id,int instrMsg_id,int sync_id,int leftPawnMoves_id,int newPawnPos_id,int n_pawns,char letter[],int* pawns,int w,int h)
+void SpawnPawns(char letter[],int opt_id,int map_id,int smap_id,int sync_id)
 {
 	char opt_id_s[10];
 	char map_id_s[10];
@@ -177,6 +207,7 @@ void SpawnPawns(int pawnScoredMsg_id,int opt_id,int map_id,int smap_id,int posMs
 	sprintf(pawnScoredMsg_id_s,"%d",pawnScoredMsg_id);
 	sprintf(semPawn_id_s,"%d",semPawn_id);
 	semSet(semPawn_id,0,n_pawns);
+
 	/*Prepare Argv*/
 	argv[0] = "./pawn";
 	argv[1] = opt_id_s;
@@ -204,18 +235,22 @@ void SpawnPawns(int pawnScoredMsg_id,int opt_id,int map_id,int smap_id,int posMs
 				printf("ERRORE\n");
 			break;
 			default:
+
 			/*printf("%d\n",pawns[i]);*/
+
 			break;
 		}
 	}
 
 }
 
-int rndPos(int w,int h,int smap_id)
+int rndPos(int smap_id)
 {
+	/*calculating number position for the current pawn, if the position is locked , recursive call me and try new one*/
 	int range = w*h;
 	int p=0;
 	p=(rand()%(range));
+
 	if(semGet(smap_id,p)==1)
 	{
 		semReserve(smap_id,p,0);
@@ -223,20 +258,25 @@ int rndPos(int w,int h,int smap_id)
 	}
 	else
 	{
-		return rndPos(w,h,smap_id);
+		return rndPos(smap_id);
 	}
 }
 
 
-void GameStart(int n_pawns,int n_players,int pawn_sync,int posMsg_id,int mynumber,int w,int h,int smap_id,cell* table,int letter,int *pawnPos)
+void GameStart(cell* table,int n_players,int letter,int pawn_sync,int mynumber,int smap_id)
 {
 	int i=0;
 	srand(time(NULL));
 	for(i=0;i<n_pawns;i++)
 	{
+		/*Wait my turn*/
 		semReserve(pawn_sync,mynumber,0);
 		/*printf("Init for %d",i);*/
-		PawnInit(w,h,smap_id,posMsg_id,table,letter,i,pawnPos);
+
+		/*Initialize Pawn Call for all pawns*/
+		PawnInit(table,letter,i,smap_id);
+
+		/*Unlock my next*/
 		if(mynumber==(n_players-1))
 			semRelease(pawn_sync,0,0);
 		else
@@ -244,38 +284,52 @@ void GameStart(int n_pawns,int n_players,int pawn_sync,int posMsg_id,int mynumbe
 	}
 }
 
-void SendDirective(int w,int h,int pawnPos[],int pawnMoves[],int instrMsg_id,cell* table,int n_pawns,int flagPos[],int n_flags,int letter)
+void SendDirective(int instrMsg_id,cell* table,int n_pawns,int n_flags,int letter)
 {
+
 	int i=0,j=0,cont=0;
 	Move* assoc;
 	PathObj* PawnFlag;
 	instrMsg message;
 	assoc=malloc(sizeof(Move)*n_flags);
 	PawnFlag=malloc(sizeof(PathObj)*n_flags);
-	num_instr=0;
+
+	/*Initializing the ASSOC array to a default pawnPos value*/
 	for(i=0;i<n_flags;i++)
 	{
 		assoc[i].pawnPos=-1;
 	}
 
-	getFlagPos(w*h,table,flagPos);
+	/*Get all flags position and memorize it in flagPos*/
+	getFlagPos(w*h,table);
+
 	/*Algorithm aplicated n_flags times because of the Recalculation of Direct taking flag of a Pawn*/
 	for(j=0;j<n_flags;j++)
 		for(i=0;i<n_pawns;i++)
 		{
+			/*If my pawn has more moves than 0*/
 			if(pawnMoves[i]>0)
-				Algorithm(w,h,pawnPos[i],i,pawnMoves[i],flagPos,n_flags,assoc);
+				Algorithm(pawnPos[i],i,pawnMoves[i],n_flags,assoc);
 		}
-/*
-	printf("			---------------------------------letter %c------------------------------\n",letter);
 
+	printf("			--------------------------------- letter %c ------------------------------\n",letter);
+
+	/*Printing cycle (commentable)*/
 	for(i=0;i<n_flags;i++)
 	{
-		printf("			%c	Flag at position : %d , Best distance is %d by Pawn %d\n",letter,flagPos[i],assoc[i].distance,assoc[i].pawnPos+1);
+		if(assoc[i].pawnPos+1!=0)
+		{
+			printf("			|%c	Flag at position : %d , Best distance is %d by Pawn %d\n",letter,flagPos[i],assoc[i].distance,assoc[i].pawnPos+1);
+		}
+		else
+		{
+			printf("			|%c	Flag at position : %d , Best distance is UNDEFINED\n",letter,flagPos[i]);
+		}
 	}
 
-	printf("			------------------------------------------------------------------------\n");*/
-	/*ATTENZIONE LA PAWNPOS ASSEGNATA E' GIUSTA NEL VETTORE MA IL TYPE E' SEMPRE +1 rispetto la posizione (dato che type 0 è generico)*/
+	printf("			-------------------------------------------------------------------------\n");
+
+	/*Cycle for Path Sender*/
 	for(i=0;i<n_pawns;i++)
 	{
 		cont=0;
@@ -288,11 +342,12 @@ void SendDirective(int w,int h,int pawnPos[],int pawnMoves[],int instrMsg_id,cel
 				cont++;
 			}
 		}
+		/*If current pawn has atleast 1 path*/
 		if(cont!=0)
 		{
-			PathSender(instrMsg_id,&message,(i+1),i,PawnFlag,cont,pawnPos,flagPos,w);
-			num_instr+=cont;
+			PathSender(&message,(i+1),i,PawnFlag,cont);
 		}
+		/*Else the pawn get the DEFAULT "NO MOVE" values*/
 		else
 		{
 			message.type=i+1;
@@ -305,11 +360,13 @@ void SendDirective(int w,int h,int pawnPos[],int pawnMoves[],int instrMsg_id,cel
 		}
 		
 	}
-	/*free(assoc);*/
+	/*Cleaning assoc space avoiding useless memory used*/
+	free(assoc);
 }
 
-void getFlagPos(int size,cell* table,int flagPos[])
+void getFlagPos(int size,cell* table)
 {
+	/*Get flag position looking through the chessboard*/
 	int i=0;
 	int cont = 0;
 	for(i=0;i<size;i++)
@@ -322,14 +379,25 @@ void getFlagPos(int size,cell* table,int flagPos[])
 	}
 }
 
-void Algorithm(int w,int h,int pos,int pawnPos,int moves,int flagPos[],int n_flags,Move assoc[])
+
+/*MOVE ALGORITHM EXPLANATION : 
+								I'm calculating the BEST path for every pawns.
+								I have the ASSOC array that as index indicate the Flag index, and contains : PawnIndex and Distance from current Flag (assoc index)
+								If my pawn is closer than others DIRECTLY taking the Flag he check if is the closer to him, or add it to his path calculating distance
+								from last flag "taken" to next will take. After the full calculation I change the ASSOC checking all my PATH array, and checking if my
+								DISTANCE in Path for the Flag X is less than others in assoc[X].distance.
+								It iterates and check "nFlags" times (called by the "father function") this avoid a bug caused by the Algorithm application to pawn Ordered
+*/
+void Algorithm(int pos,int pawnPos,int moves,int n_flags,Move assoc[])
 {
 	int i=0,j=0,z=0,found=0;
 	int startX,startY,endX,endY,fX,fY;
 	PathObj* Path;
 	int currdist,pathdist=0;
+
 	/*printf("moves left %d for pawn %d\n",moves,pawnPos+1);*/
-	getPos(&startX,&startY,pos,w);
+
+	getPos(&startX,&startY,pos);
 	Path = malloc(sizeof(PathObj)*n_flags);
 	for(i=0;i<n_flags;i++)
 	{
@@ -338,7 +406,7 @@ void Algorithm(int w,int h,int pos,int pawnPos,int moves,int flagPos[],int n_fla
 	for(i=0;i<n_flags;i++)
 	{
 		found=0;
-		getPos(&endX,&endY,flagPos[i],w);
+		getPos(&endX,&endY,flagPos[i]);
 		currdist=(abs(startX-endX)+abs(startY-endY));
 		if((currdist<assoc[i].distance || assoc[i].pawnPos==-1 || assoc[i].pawnPos==pawnPos) && currdist<=moves)
 		{
@@ -346,11 +414,11 @@ void Algorithm(int w,int h,int pos,int pawnPos,int moves,int flagPos[],int n_fla
 			{
 				if(j!=0)
 				{
-					getPos(&fX,&fY,flagPos[Path[j-1].flagIndex],w);
+					getPos(&fX,&fY,flagPos[Path[j-1].flagIndex]);
 					pathdist=(abs(endX-fX)+abs(endY-fY))+Path[j-1].flagDistance;
 					if((pathdist<Path[j].flagDistance || Path[j].flagIndex==-1) && (pathdist<assoc[i].distance || assoc[i].pawnPos==-1 || assoc[i].pawnPos==pawnPos) && pathdist<=moves)
 					{
-						insertPath(Path,n_flags,flagPos,j,i,pathdist,w);
+						insertPath(Path,n_flags,j,i,pathdist);
 						found=1;
 					}
 				}
@@ -358,7 +426,7 @@ void Algorithm(int w,int h,int pos,int pawnPos,int moves,int flagPos[],int n_fla
 				{
 					if((currdist<Path[j].flagDistance || Path[j].flagIndex==-1) && (currdist<assoc[i].distance || assoc[i].pawnPos==-1 || assoc[i].pawnPos==pawnPos) && currdist<=moves)
 					{
-						insertPath(Path,n_flags,flagPos,j,i,currdist,w);
+						insertPath(Path,n_flags,j,i,currdist);
 						found=1;
 					}
 				}
@@ -383,7 +451,8 @@ void Algorithm(int w,int h,int pos,int pawnPos,int moves,int flagPos[],int n_fla
 	/*printf("My pos is : x %d , y %d \n Best is : x %d,y %d \n pos : %d\n Distance : %d\n",myX,myY,bX,bY,best,dist);*/
 }
 
-void insertPath(PathObj Path[],int n_flags,int flagPos[],int pos,int flagIndex,int flagDistance,int w)
+/*Insert new Flag to PATH array (in algorithm) shifting the others in the array*/
+void insertPath(PathObj Path[],int n_flags,int pos,int flagIndex,int flagDistance)
 {
 	int i=0,fine=0;
 	int tempIndex,tempDistance;
@@ -401,14 +470,16 @@ void insertPath(PathObj Path[],int n_flags,int flagPos[],int pos,int flagIndex,i
 			tempIndex=Path[i].flagIndex;
 			Path[i].flagIndex=flagIndex;
 			Path[i].flagDistance=flagDistance;
-			getPos(&startX,&startY,flagPos[flagIndex],w);
-			getPos(&endX,&endY,flagPos[tempIndex],w);
+			getPos(&startX,&startY,flagPos[flagIndex]);
+			getPos(&endX,&endY,flagPos[tempIndex]);
 			flagDistance=flagDistance+abs(startX-endX)+abs(startY-endY);
 			flagIndex=tempIndex;
 		}
 	}
 }
-void PathSender(int instrMsg_id,instrMsg* message,long type,int pawn,PathObj PawnFlag[],int length,int pawnPos[],int flagPos[],int w)
+
+/*Sending all good Paths*/
+void PathSender(instrMsg* message,long type,int pawn,PathObj PawnFlag[],int length)
 {
 	int i=0,j=0,tempDist,tempIndex,left;
 
@@ -431,9 +502,9 @@ void PathSender(int instrMsg_id,instrMsg* message,long type,int pawn,PathObj Paw
 	{
 		left=(length-i)-1;
 		if(i==0)
-			PathCalculator(flagPos[PawnFlag[i].flagIndex],pawnPos[pawn],message,w);
+			PathCalculator(flagPos[PawnFlag[i].flagIndex],pawnPos[pawn],message);
 		else
-			PathCalculator(flagPos[PawnFlag[i].flagIndex],flagPos[PawnFlag[i-1].flagIndex],message,w);
+			PathCalculator(flagPos[PawnFlag[i].flagIndex],flagPos[PawnFlag[i-1].flagIndex],message);
 		message->type=type;
 		message->left=left;
 		send_instrMsg(instrMsg_id,message);
@@ -441,11 +512,13 @@ void PathSender(int instrMsg_id,instrMsg* message,long type,int pawn,PathObj Paw
 	}
 
 }
-void PathCalculator(int flagPos,int pawnPos,instrMsg* message,int w)
+
+/*Calculate the Path from a Pawn to his own FLAG, and set the DIRECTION array*/
+void PathCalculator(int flagPos,int pawnPos,instrMsg* message)
 {
 	int fX,fY,pX,pY,dirX,dirY,distX,distY;
-	getPos(&fX,&fY,flagPos,w);
-	getPos(&pX,&pY,pawnPos,w);
+	getPos(&fX,&fY,flagPos);
+	getPos(&pX,&pY,pawnPos);
 	dirX = pX-fX;
 	dirY = pY-fY;
 	distX=abs(pX-fX);
@@ -483,12 +556,13 @@ void PathCalculator(int flagPos,int pawnPos,instrMsg* message,int w)
 	}
 }
 
-void PawnInit(int w,int h,int smap_id,int posMsg_id,cell* table,int letter,long type,int* pawnPos)
+/*Initialize the pawns position*/
+void PawnInit(cell* table,int letter,long type,int smap_id)
 {
 	int p=0;
 	posMsg message;
 	/*printf("---->INITIALIZE MY PAWNS\n");*/
-	p=rndPos(w,h,smap_id);
+	p=rndPos(smap_id);
 
 	pawnPos[type]=p;
 	message.type=type+1;
@@ -500,56 +574,15 @@ void PawnInit(int w,int h,int smap_id,int posMsg_id,cell* table,int letter,long 
 	table[p].type='p';
 }
 
-void Print_Table(int w,int h,cell* table)
-{
-	int i=0,j=0;
-	while(i<w*h)
-	{
-		if(j<w)
-		{
-			if(table[i].type!='p')
-				printf("%d|",table[i].val);
-			else
-				printf("%c|",table[i].val);
-		}
-		else
-		{
-			if(table[i].type!='p')
-				printf("\n%d|",table[i].val);
-			else
-				printf("\n%c|",table[i].val);
-			j=0;
-		}
-		i++;
-		j++;
-	}
-	printf("\n");
-}
-
-void Print_TStatus(int w,int h,cell* table)
-{
-	int i=0,j=0;
-	while(i<w*h)
-	{
-		if(j<w)
-			printf("%c",table[i].type);
-		else
-		{
-			printf("\n%c",table[i].type);
-			j=0;
-		}
-		i++;
-		j++;
-	}
-	printf("\n");
-}
-void getPos(int* x,int* y,int pos,int w)
+/*Get position in array function*/
+void getPos(int* x,int* y,int pos)
 {
 	*x=(pos%w);
 	*y=(pos/w);
 }
 
-void InitPawnMoves(int pawnMoves[],options* settings)
+/*Initalize the PawnMoves Array*/
+void InitPawnMoves(options* settings)
 {
 	int i=0;
 	for(i=0;i<settings->SO_NUM_P;i++)
@@ -558,37 +591,49 @@ void InitPawnMoves(int pawnMoves[],options* settings)
 	}
 }
 
-
-void waitScores(int pawnScoredMsg_id,int n_flags,int scoreMsg_id,int type)
+/*Waiting all scores*/
+void waitScores(int n_flags,int scoreMsg_id,int sync_id)
 {
 	int i=0;
 	struct msqid_ds buf;
 	numMsg scoreFromPawn;
 	numMsg scoreToMaster;
+
+	/*I wait for the ROUND-END semaphore set by master in IPC_NOWAIT*/
 	while(semWaitZero(sync_id,ROUNDEND,IPC_NOWAIT)==-1)
 	{
+		/*If round is not ENDED I wait a message (maybe it will be a HIT)*/
+		/*I will get the EMPTY message if the last Hit has been made (and 1 of my pawns has been unlocked on ROUND-END), 
+		and unlock me to check again ROUND-END (Surely ended now) */
 		read_numMsg(pawnScoredMsg_id,&scoreFromPawn,0);
 		if(scoreFromPawn.q>0)
 		{
-			printf("PLAYER : %c read HIT of %d\n",letter,scoreFromPawn.q);
+
+			/*printf("PLAYER : %c read HIT of %d\n",letter,scoreFromPawn.q);*/
+
 			scoreToMaster.q=scoreFromPawn.q;
 			scoreToMaster.type=type;
 			send_numMsg(scoreMsg_id,&scoreToMaster);
 		}
 	}
-	printf("Player WAITING Pawn Messages\n");
+	/*Waiting all pawns sending the "default ZERO message"*/
 	semWaitZero(semPawn_id,0,0);
+
+	/*Reset Semaphore*/
 	semSet(semPawn_id,0,n_pawns);
-	printf("Player Read all Messages\n");
+
+	/*Number of message in the Queue*/
 	msgctl(pawnScoredMsg_id,IPC_STAT,&buf);
+
+	/*Cleaning QUEUE Routine*/
 	for(i=0;i<buf.msg_qnum;i++)
 	{
 		read_numMsg(pawnScoredMsg_id,&scoreFromPawn,0);
 	}
-	printf("Player GO ON\n");
 }
 
-void readLeftMoves(int leftPawnMoves_id,int pawnMoves[],int n_pawns)
+/*Reading left moves from pawn*/
+void readLeftMoves()
 {
 	int i=0;
 	numMsg leftPawnMoves;
@@ -599,7 +644,8 @@ void readLeftMoves(int leftPawnMoves_id,int pawnMoves[],int n_pawns)
 	}
 }
 
-void readNewPos(int newPawnPos_id,int pawnPos[],int n_pawns)
+/*Reading new moves from pawn*/
+void readNewPos()
 {
 	int i=0;
 	numMsg newPawnPos;
@@ -610,6 +656,7 @@ void readNewPos(int newPawnPos_id,int pawnPos[],int n_pawns)
 	}
 }
 
+/*Calculate my total moves left*/
 int calcTotMoves()
 {
 	int i=0;
@@ -621,27 +668,13 @@ int calcTotMoves()
 	return tot;
 }
 
-
-void termination_handler(int sig)
-{
-	int i=0;
-	numMsg msg;
-	for(i=0;i<n_pawns;i++)
-	{
-		kill(pawns[i],SIGINT);
-	}
-	while(wait(NULL)!=-1);
-	msg.type=type;
-	msg.q=calcTotMoves();
-	send_numMsg(movesMsg_id,&msg);
-	ClosingRoutine();
-	printf("\n \n PLAYER ENDED FOR ROUND TERM \n \n ");
-	exit(0);
-}
-
-
+/*Closing routines*/
 void ClosingRoutine()
 {
+	free(pawnPos);
+	free(flagPos);
+	free(pawnMoves);
+	free(pawns);
 	semctl(semPawn_id,0,IPC_RMID);
 	msgctl(instrMsg_id, IPC_RMID, NULL);
 	msgctl(posMsg_id, IPC_RMID, NULL);
@@ -650,3 +683,27 @@ void ClosingRoutine()
 	msgctl(pawnScoredMsg_id,IPC_RMID,NULL);
 
 }
+
+void termination_handler(int sig)
+{
+	int i=0;
+	numMsg msg;
+	/*Killing all Pawns*/
+	for(i=0;i<n_pawns;i++)
+	{
+		kill(pawns[i],SIGINT);
+	}
+	while(wait(NULL)!=-1);
+
+	/*Send last message to player*/
+	msg.type=type;
+	msg.q=calcTotMoves();
+	send_numMsg(movesMsg_id,&msg);
+
+	/*Clean the IPCS*/
+	ClosingRoutine();
+
+	/*printf("\n \n PLAYER ENDED FOR ROUND TERM \n \n ");*/
+	exit(0);
+}
+
