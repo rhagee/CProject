@@ -1,16 +1,25 @@
 
-FLAGS =  -std=c89 -Wpedantic #OPTION FOR EXECUTABLE FILES
-OFLAGS = -c -std=c89 -Wpedantic #OPTIONS FOR .o FILE
+#OPTION FOR EXECUTABLE FILES
+FLAGS =  -std=c89 -Wpedantic
+#OPTIONS FOR .o FILE
+OFLAGS = -c -std=c89 -Wpedantic
 
 #OBJ = src/master.c src/player.c src/pawn.c
-DEPS = lib/sharedmem.c lib/sharedmem.h #DEPENDENCIES
 
-EXECUTABLE = main #EXECUTABLE NAME
-EXDIR = exe #EXE DIRECTORY
-SDIR = src #SOURCE DIRECTORY
+#DEPENDENCIES
+DEPS = lib/sharedmem.c lib/sharedmem.h
 
-LIBDIR = lib #LIBRARY DIRECTORY
-LIBNAME = sharedmem.o #LIBRARY NAME AFTER GENERATING .o
+#EXECUTABLE NAME
+EXECUTABLE = main
+#EXE DIRECTORY
+EXDIR = exe
+#SOURCE DIRECTORY
+SDIR = src
+
+#LIBRARY DIRECTORY
+LIBDIR = lib
+#LIBRARY NAME AFTER GENERATING .o
+LIBNAME = sharedmem.o
 
 
 #BASIC MAKE
