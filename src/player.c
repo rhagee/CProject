@@ -1,5 +1,5 @@
 															/*Includes*/
-#include "lib/sharedmem.h"
+#include "../lib/sharedmem.h"
 															/*Defines*/														
 #define intconvert(X) atoi(argv[X]);
 #define FIRSTPLAYER 0
@@ -672,7 +672,6 @@ int calcTotMoves()
 void ClosingRoutine()
 {
 	free(pawnPos);
-	free(flagPos);
 	free(pawnMoves);
 	free(pawns);
 	semctl(semPawn_id,0,IPC_RMID);

@@ -1,5 +1,5 @@
 																/*Includes*/
-#include "lib/sharedmem.h"
+#include "../lib/sharedmem.h"
 
 																/* Defines */
 #define MENU "Select GameMode : \n1.Easy \n2.Hard \nDefault: Easy \nSelezione: "
@@ -140,7 +140,7 @@ int main()
 
 																	/*Create Players*/
 	createPlayers();
-
+	printf("WAITING PLAYER\n");
 	semWaitZero(sync_id,MASTERSYNC,0);
 																	
 																	/* Round Routine */
@@ -247,16 +247,16 @@ void createPlayers()
 	semSetAll(pawn_sync,0);
 	semSet(pawn_sync,0,1);
 	semSetAll(smap_id,1);
-
+	printf("PLAYERS %d\n",n_players);
 	/*Alphabet isn't that long*/
 	if(n_players>50)
 	{
 		WARN_NPLAYERS;
 		sleep(3);
 	}
-
 	for(i=0;i<n_players;i++)
 	{
+		printf("%d",i);
 		sprintf(mynumber,"%d",i);
 		if(i<=25)
 			sprintf(letter,"%d", i+97);
@@ -275,7 +275,7 @@ void createPlayers()
 				printf("ERRORE \n");
 			break;
 			default:
-					/*printf("Player %c - PID : %d\n",atoi(letter),players[i]);*/
+					printf("Player %c - PID : %d\n",atoi(letter),players[i]);
 					scores[i] = 0;
 			break;
 		}
@@ -316,6 +316,7 @@ void Read_Settings(int* SO_NUM_G,int* SO_NUM_P,int* SO_MAX_TIME,int* SO_BASE,int
 	{
 		fscanf(file,EASY_MODE,SO_NUM_G,SO_NUM_P,SO_MAX_TIME,SO_BASE,SO_ALTEZZA,SO_FLAG_MIN,SO_FLAG_MAX,SO_ROUND_SCORE,SO_N_MOVES,SO_MIN_HOLD_NSEC);
 	}
+	printf("READ SETTINGS \n");
 }
 
 void Init_Table()

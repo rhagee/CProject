@@ -1,6 +1,6 @@
 
 
-#include "lib/sharedmem.h"
+#include "../lib/sharedmem.h"
 
 
 #define intconvert(X) atoi(argv[X])
